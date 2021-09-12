@@ -13,11 +13,9 @@ type Command interface {
 
 // Dummy interface for TPM response structures so that they can be
 // easily distinguished from other types of structures.
-type Command interface {
-	// The TPM command code associated with this command.
-	Command() TPMCC
-}
-
+// All implementations of this interface are pointers to
+// structures, for settability.
+// See https://go.dev/blog/laws-of-reflection
 type Response interface {
 	// The TPM command code associated with this response.
 	Response() TPMCC
@@ -32,7 +30,7 @@ type NamedHandle struct {
 // 12.1
 type CreateCommand struct {
 	// handle of parent for new object
-	ParentHandle NamedHandle `tpm2:"auth=1"`
+	ParentHandle NamedHandle `tpm2:"handle,auth"`
 	// the sensitive data
 	InSensitive TPM2BSensitiveCreate
 	// the public template
@@ -45,7 +43,7 @@ type CreateCommand struct {
 	CreationPCR TPMLPCRSelection
 }
 
-func (_ CreateCommand) Command() { return TPMCCCreate }
+func (_ *CreateCommand) Command() { return TPMCCCreate }
 
 type CreateResponse struct {
 	// the private portion of the object
@@ -61,12 +59,12 @@ type CreateResponse struct {
 	CreationTicket TPMTTKCreation
 }
 
-func (_ CreateResponse) Response() { return TPMCCCreate }
+func (_ *CreateResponse) Response() { return TPMCCCreate }
 
 // 12.2
 type LoadCommand struct {
 	// handle of parent for new object
-	ParentHandle NamedHandle `tpm2:"auth=1"`
+	ParentHandle NamedHandle `tpm2:"handle,auth"`
 	// the private portion of the object
 	InPrivate TPM2BPrivate
 	// the public portion of the object
@@ -82,11 +80,11 @@ type LoadResponse struct {
 	Name TPM2BName
 }
 
-func (_ LoadResponse) Response() { return TPMCCLoad }
+func (_ *LoadResponse) Response() { return TPMCCLoad }
 
 // 12.7
 type UnsealCommand struct {
-	ItemHandle NamedHandle `tpm2:"auth=1"`
+	ItemHandle NamedHandle `tpm2:"handle,auth"`
 }
 
 func (_ UnsealCommand) Command() { return TPMCCUnseal }
@@ -95,13 +93,13 @@ type UnsealResponse struct {
 	OutData TPM2BSensitiveData
 }
 
-func (_ UnsealResponse) Response() { return TPMCCUnseal }
+func (_ *UnsealResponse) Response() { return TPMCCUnseal }
 
 // 24.1
 type CreatePrimaryCommand struct {
 	// TPM_RH_ENDORSEMENT, TPM_RH_OWNER, TPM_RH_PLATFORM+{PP},
 	// or TPM_RH_NULL
-	PrimaryHandle NamedHandle `tpm2:"auth=1"`
+	PrimaryHandle NamedHandle `tpm2:"handle,auth"`
 	// the sensitive data
 	InSensitive TPM2BSensitiveCreate
 	// the public template
@@ -132,7 +130,7 @@ type CreatePrimaryResponse struct {
 	Name TPM2BName
 }
 
-func (_ CreatePrimaryResponse) Response() { return TPMCCCreatePrimary }
+func (_ *CreatePrimaryResponse) Response() { return TPMCCCreatePrimary }
 
 // 28.4
 type FlushContextCommand struct {
@@ -145,4 +143,4 @@ func (_ FlushContextCommand) Command() { return TPMCCFlushContext }
 type CreatePrimaryResponse struct {
 }
 
-func (_ FlushContextResponse) Response() { return TPMCCFlushContext }
+func (_ *FlushContextResponse) Response() { return TPMCCFlushContext }

@@ -1,9 +1,13 @@
 package tpm2
 
-import "hash"
+import (
+	"hash"
+	"io"
+)
 
 // Transport represents a physical connection to a TPM.
 type Transport interface {
+	io.Closer
 	// Send sends a command stream to the TPM and receives back a response.
 	// Errors from the TPM itself (i.e., in the response stream) are not
 	// parsed. Only errors from actually sending the command.
@@ -26,6 +30,8 @@ type Session interface {
 	// encryption and decryption, then decrypt and encrypt are non-nil
 	// and contain nonceTPM from each of those sessions, respectively.
 	Authorize(cpHash, nonceCaller, decrypt, encrypt []byte) ([]byte, error)
+	// Updates NonceTPM for the session.
+	Update(nonceTPM []byte) error
 	// Validates the response HMAC for the session.
 	Validate(rpHash, nonceCaller, hmac []byte) error
 	// If this session is used for parameter decryption, encrypts the
@@ -43,5 +49,5 @@ type Interface interface {
 	// sessions may be 0 to three Session objects. See the TPM
 	// specification for what types of sessions are supported.
 	// An error inside the TPM response stream is parsed at this layer.
-	Dispatch(command Command, response Response, sessions ...Session) error
+	Dispatch(cmd Command, rsp Response, sess ...Session) error
 }
