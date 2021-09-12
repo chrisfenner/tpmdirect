@@ -43,5 +43,5 @@ type Interface interface {
 	// sessions may be 0 to three Session objects. See the TPM
 	// specification for what types of sessions are supported.
 	// An error inside the TPM response stream is parsed at this layer.
-	Dispatch(command, response interface{}, sessions ...Session) error
+	Dispatch(command Command, response Response, sessions ...Session) error
 }
