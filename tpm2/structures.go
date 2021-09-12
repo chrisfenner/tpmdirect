@@ -112,6 +112,9 @@ type TPMAObject struct {
 // 9.3
 type TPMIDHObject = TPMHandle
 
+// 9.11
+type TPMIDHContext = TPMHandle
+
 // 9.27
 type TPMIAlgHash = TPMAlgID
 
@@ -138,6 +141,12 @@ type TPM2BData struct {
 
 // 10.4.5
 type TPM2BAuth TPM2BDigest
+
+// 10.5.3
+// NOTE: This structure does not contain a TPMUName, because that union
+// is not tagged with a selector. Instead, TPM2B_Name is flattened and
+// all TPMDirect helpers that deal with names will deal with them as so.
+type TPM2BName TPM2BData
 
 // 11.1.3
 type TPMUSymKeyBits struct {
@@ -168,6 +177,9 @@ type TPMSSymCipherParms struct {
 	// a symmetric block cipher
 	Sym TPMTSymDefObject
 }
+
+// 11.1.14
+type TPM2BSensitiveData TPM2BData
 
 // 11.1.15
 type TPMSSensitiveCreate struct {
