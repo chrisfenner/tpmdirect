@@ -32,8 +32,8 @@ func (t TPM) Close() error {
 	return transport.Close()
 }
 
-// Dispatch sends the provided command and returns the provided response.
-func (t TPM) Dispatch(cmd tpm2.Command, rsp tpm2.Response, sess ...tpm2.Session) error {
+// Execute sends the provided command and returns the provided response.
+func (t TPM) Execute(cmd tpm2.Command, rsp tpm2.Response, sess ...tpm2.Session) error {
 	cc := cmd.Command()
 	if rsp.Response() != cc {
 		panic(fmt.Sprintf("cmd and rsp must be for same command: %v != %v", cc, rsp.Response()))
@@ -79,8 +79,7 @@ func (t TPM) Dispatch(cmd tpm2.Command, rsp tpm2.Response, sess ...tpm2.Session)
 	return nil
 }
 
-// marshal will serialize the given values, appending them onto the given byte
-// slice.
+// marshal will serialize the given values, appending them onto the given buffer.
 // Panics if any of the values are not marshallable.
 func marshal(buf *bytes.Buffer, vs ...reflect.Value) {
 	for _, v := range vs {
@@ -127,7 +126,7 @@ func marshalStruct(buf *bytes.Buffer, v reflect.Value) {
 
 // hasTag looks up to see if the type's tpm2-namespaced tag contains the given value.
 // Returns false if there is no tpm2-namespaced tag on the type.
-func hasTag(t reflect.Type, tag string) bool {
+func hasTag(t reflect.StructField, tag string) bool {
 	thisTag, ok := t.Tag.Lookup("tpm2")
 	return ok && strings.Contains(thisTag, tag)
 }
@@ -138,13 +137,13 @@ func hasTag(t reflect.Type, tag string) bool {
 // Panics if v's Kind is not Struct.
 func taggedMembers(v reflect.Value, tag string, invert bool) []reflect.Value {
 	var result []reflect.Value
+	t := v.Type()
 
-	for i := 0; i < v.NumField(); i++ {
-		f := v.Field(i)
+	for i := 0; i < t.NumField(); i++ {
 		// Add this one to the list if it has the tag and we're not inverting,
 		// or if it doesn't have the tag and we are inverting.
-		if hasTag(f.Type(), "handle") != invert {
-			result = append(result, f)
+		if hasTag(t.Field(i), "handle") != invert {
+			result = append(result, v.Field(i))
 		}
 	}
 
@@ -153,7 +152,7 @@ func taggedMembers(v reflect.Value, tag string, invert bool) []reflect.Value {
 
 // cmdHandles returns the handles area of the command.
 func cmdHandles(cmd tpm2.Command) []byte {
-	handles := taggedMembers(cmd, "handle")
+	handles := taggedMembers(cmd, "handle", false)
 
 	// Initial capacity is enough to hold 3 handles
 	result := bytes.NewBuffer(make([]byte, 0, 12))
@@ -165,11 +164,70 @@ func cmdHandles(cmd tpm2.Command) []byte {
 
 // cmdParameters returns the parameters area of the command.
 // The first parameter may be encrypted by one of the sessions.
-func cmdParameters(cmd tpm2.Command, sess []tpm2.Session) []byte {
+func cmdParameters(cmd tpm2.Command, sess []tpm2.Session) ([]byte, error) {
+	parms := taggedMembers(cmd, "handle", true)
+
+	// Marshal the first parameter for in-place session encryption.
+	var firstParm bytes.Buffer
+	marshal(firstParm, parms[0])
+	firstParmBytes := firstParm.Bytes()
+
+	// Encrypt the first parameter if there are any decryption sessions.
+	encrypted := false
+	for i, s := range sess {
+		if s.IsDecryption() {
+			if encrypted {
+				// Only one session may be used for decryption.
+				return nil, fmt.Errorf("too many decrypt sessions")
+			}
+			err := s.Encrypt(firstParmBytes)
+			if err != nil {
+				return nil, fmt.Errorf("encrypting with session %d: %w", err)
+			}
+			encrypted := true
+		}
+	}
+
+	var result bytes.Buffer
+	result.Write(firstParmBytes)
+	// Write the rest of the parameters normally.
+	marshal(result, parms[1:0]...)
+
+	return result.Bytes()
 }
 
 // cmdSessions returns the authorization area of the command.
-func cmdSessions(sess []tpm2.Session, cmd tpm2.Command) []byte {
+func cmdSessions(sess []tpm2.Session, cc tpm2.TPMCC, names []tpm2.TPM2BName, parms []byte) ([]byte, error) {
+	// Find the encryption and decryption session nonceTPMs, if any.
+	var encNonceTPM, decNonceTPM []byte
+	for _, s := range sess {
+		if s.IsEncryption() {
+			if encNonceTPM != nil {
+				// Only one encrypt session is permitted.
+				return nil, fmt.Errorf("too many encrypt sessions")
+			}
+			encNonceTPM = s.NonceTPM()
+		}
+		if s.IsDecryption() {
+			if decNonceTPM != nil {
+				// Only one decrypt session is permitted.
+				return nil, fmt.Errorf("too many decrypt sessions")
+			}
+			decNonceTPM = s.NonceTPM()
+		}
+	}
+
+	var buf bytes.Buffer
+	// Calculate the authorization HMAC for each session
+	for i, s := range sess {
+		auth, err := s.Authorize(cc, parms, parms, encNonceTPM, decNonceTPM, names)
+		if err != nil {
+			return nil, fmt.Errorf("session %d: %w", i, err)
+		}
+		marshal(&buf, auth)
+	}
+
+	return buf.Bytes(), nil
 }
 
 // cmdHeader returns the structured TPM command header.

@@ -109,8 +109,72 @@ type TPMAObject struct {
 	Reserved6 uint8 `tpm2:"bit=31:24"`
 }
 
+// 8.4
+type TPMASession struct {
+	// SET (1): In a command, this setting indicates that the session
+	// is to remain active after successful completion of the command.
+	// In a response, it indicates that the session is still active.
+	// If SET in the command, this attribute shall be SET in the response.
+	// CLEAR (0): In a command, this setting indicates that the TPM should
+	// close the session and flush any related context when the command
+	// completes successfully. In a response, it indicates that the
+	// session is closed and the context is no longer active.
+	// This attribute has no meaning for a password authorization and the
+	// TPM will allow any setting of the attribute in the command and SET
+	// the attribute in the response.
+	ContinueSession uint8 `tpm2:"bit=0"`
+	// SET (1): In a command, this setting indicates that the command
+	// should only be executed if the session is exclusive at the start of
+	// the command. In a response, it indicates that the session is
+	// exclusive. This setting is only allowed if the audit attribute is
+	// SET (TPM_RC_ATTRIBUTES).
+	// CLEAR (0): In a command, indicates that the session need not be
+	// exclusive at the start of the command. In a response, indicates that
+	// the session is not exclusive.
+	AuditExclusive uint8 `tpm2:"bit=1"`
+	// SET (1): In a command, this setting indicates that the audit digest
+	// of the session should be initialized and the exclusive status of the
+	// session SET. This setting is only allowed if the audit attribute is
+	// SET (TPM_RC_ATTRIBUTES).
+	// CLEAR (0): In a command, indicates that the audit digest should not
+	// be initialized. This bit is always CLEAR in a response.
+	AuditReset uint8 `tpm2:"bit=2"`
+	// shall be CLEAR
+	Reserved1 uint8 `tpm2:"bit=4:3"`
+	// SET (1): In a command, this setting indicates that the first
+	// parameter in the command is symmetrically encrypted using the
+	// parameter encryption scheme described in TPM 2.0 Part 1. The TPM will
+	// decrypt the parameter after performing any HMAC computations and
+	// before unmarshaling the parameter. In a response, the attribute is
+	// copied from the request but has no effect on the response.
+	// CLEAR (0): Session not used for encryption.
+	// For a password authorization, this attribute will be CLEAR in both the
+	// command and response.
+	Decrypt uint8 `tpm2:"bit=5"`
+	// SET (1): In a command, this setting indicates that the TPM should use
+	// this session to encrypt the first parameter in the response. In a
+	// response, it indicates that the attribute was set in the command and
+	// that the TPM used the session to encrypt the first parameter in the
+	// response using the parameter encryption scheme described in TPM 2.0
+	// Part 1.
+	// CLEAR (0): Session not used for encryption.
+	// For a password authorization, this attribute will be CLEAR in both the
+	// command and response.
+	Encrypt uint8 `tpm2:"bit=6"`
+	// SET (1): In a command or response, this setting indicates that the
+	// session is for audit and that auditExclusive and auditReset have
+	// meaning. This session may also be used for authorization, encryption,
+	// or decryption. The encrypted and encrypt fields may be SET or CLEAR.
+	// CLEAR (0): Session is not used for audit.
+	// If SET in the command, then this attribute will be SET in the response.
+	Audit uint8 `tpm2:"bit=7"`
+}
+
 // 9.3
 type TPMIDHObject = TPMHandle
+
+// 9.8
+type TPMISHAuthSession = TPMHandle
 
 // 9.11
 type TPMIDHContext = TPMHandle
@@ -147,6 +211,21 @@ type TPM2BAuth TPM2BDigest
 // is not tagged with a selector. Instead, TPM2B_Name is flattened and
 // all TPMDirect helpers that deal with names will deal with them as so.
 type TPM2BName TPM2BData
+
+// 10.13.2
+type TPMSAuthCommand struct {
+	handle        TPMISHAuthSession
+	nonce         TPM2BData
+	attributes    TPMASession
+	authorization TPM2BData
+}
+
+// 10.13.3
+type TPMSAuthResponse struct {
+	nonce         TPM2BData
+	attributes    TPMASession
+	authorization TPM2BData
+}
 
 // 11.1.3
 type TPMUSymKeyBits struct {
