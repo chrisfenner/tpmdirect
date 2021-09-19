@@ -1,5 +1,12 @@
 package tpm2
 
+// Part 1 structures that aren't defined in Part 2
+type TPMCmdHeader struct {
+	Tag         TPMISTCommandTag
+	Length      uint16
+	CommandCode TPMCC
+}
+
 // 5.3
 
 // this is the 1.2 compatible form of the TPM_ALG_ID
@@ -24,6 +31,9 @@ type TPMAlgID uint16
 
 // 6.4
 type TPMECCCurve uint16
+
+// 6.9
+type TPMST uint16
 
 // 7.1
 type TPMHandle uint32
@@ -187,6 +197,9 @@ type TPMIAlgSymObject = TPMAlgID
 
 // 9.32
 type TPMIAlgKDF = TPMAlgID
+
+// 9.35
+type TPMISTCommandCode = TPMST
 
 // 10.1
 type TPMSEmpty = struct{}

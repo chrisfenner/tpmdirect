@@ -198,6 +198,10 @@ func cmdParameters(cmd tpm2.Command, sess []tpm2.Session) ([]byte, error) {
 
 // cmdSessions returns the authorization area of the command.
 func cmdSessions(sess []tpm2.Session, cc tpm2.TPMCC, names []tpm2.TPM2BName, parms []byte) ([]byte, error) {
+	// There is no authorization area if there are no sessions.
+	if len(sess) == 0 {
+		return nil, nil
+	}
 	// Find the encryption and decryption session nonceTPMs, if any.
 	var encNonceTPM, decNonceTPM []byte
 	for _, s := range sess {
@@ -217,21 +221,39 @@ func cmdSessions(sess []tpm2.Session, cc tpm2.TPMCC, names []tpm2.TPM2BName, par
 		}
 	}
 
-	var buf bytes.Buffer
+	buf := bytes.NewBuffer(make([]byte, 0, 1024))
+	// Skip space to write the size later
+	buf.Next(2)
 	// Calculate the authorization HMAC for each session
 	for i, s := range sess {
 		auth, err := s.Authorize(cc, parms, parms, encNonceTPM, decNonceTPM, names)
 		if err != nil {
 			return nil, fmt.Errorf("session %d: %w", i, err)
 		}
-		marshal(&buf, auth)
+		marshal(buf, auth)
 	}
 
-	return buf.Bytes(), nil
+	result := buf.Bytes()
+	// Write the size
+	binary.BigEndian.PutUint16(result[0:], uint16(buf.Len()))
+
+	return result, nil
 }
 
 // cmdHeader returns the structured TPM command header.
-func cmdHeader(hasSessions bool, restOfCommandLen int, cc TPMCC) []byte {
+func cmdHeader(hasSessions bool, length int, cc TPMCC) []byte {
+	tag := tpm2.TPMSTNoSessions
+	if hasSessions {
+		tag = tpm2.TPMSTSessions
+	}
+	hdr := tpm2.TPMCmdHeader{
+		Tag:         tag,
+		Length:      length,
+		CommandCode: cc,
+	}
+	buf := bytes.NewBuffer(make([]byte, 0, 8))
+	marshal(buf, hdr)
+	return buf.Bytes()
 }
 
 // rspHeader parses the response header. If the TPM returned an error,
