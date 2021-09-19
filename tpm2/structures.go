@@ -288,24 +288,24 @@ type TPMSAuthResponse struct {
 type TPMUSymKeyBits struct {
 	// TODO: The rest of the symmetric algorithms get their own entry
 	// in this union.
-	AES *TPMKeyBits  `tpm2:"selector=TPMAlgAES"`
-	XOR *TPMIAlgHash `tpm2:"selector=TPMAlgXOR"`
+	AES *TPMKeyBits  `tpm2:"selector=0x0006"` // TPM_ALG_AES
+	XOR *TPMIAlgHash `tpm2:"selector=0x000A"` // TPM_ALG_XOR
 }
 
 // 11.1.4
 type TPMUSymMode struct {
 	// TODO: The rest of the symmetric algorithms get their own entry
 	// in this union.
-	AES *TPMIAlgSymMode `tpm2:"selector=TPMAlgAES"`
-	XOR *struct{}       `tpm2:"selector=TPMAlgXOR"`
+	AES *TPMIAlgSymMode `tpm2:"selector=0x0006"` // TPM_ALG_AES
+	XOR *struct{}       `tpm2:"selector=0x000A"` // TPM_ALG_XOR
 }
 
 // 11.1.5
 type TPMUSymDetails struct {
 	// TODO: The rest of the symmetric algorithms get their own entry
 	// in this union.
-	AES *struct{} `tpm2:"selector=TPMAlgAES"`
-	XOR *struct{} `tpm2:"selector=TPMAlgXOR"`
+	AES *struct{} `tpm2:"selector=0x0006"` // TPM_ALG_AES
+	XOR *struct{} `tpm2:"selector=0x000A"` // TPM_ALG_XOR
 }
 
 // 11.1.7
@@ -369,8 +369,8 @@ type TPMSSchemeXOR struct {
 
 // 11.1.22
 type TPMUSchemeKeyedHash struct {
-	HMAC *TPMSSchemeHMAC `tpm2:"selector=TPMAlgHMAC"`
-	XOR  *TPMSSchemeXOR  `tpm2:"selector=TPMAlgXOR"`
+	HMAC *TPMSSchemeHMAC `tpm2:"selector=0x0005"` // TPM_ALG_HMAC
+	XOR  *TPMSSchemeXOR  `tpm2:"selector=0x000A"` // TPM_ALG_XOR
 }
 
 // 11.1.23
@@ -402,11 +402,11 @@ type TPMSKDFSchemeKDF1SP800108 TPMSSchemeHash
 
 // 11.2.3.2
 type TPMUKDFScheme struct {
-	MGF1         *TPMSKDFSchemeMGF1         `tpm2:"selector=TPMAlgMGF1"`
-	ECDH         *TPMSKDFSchemeECDH         `tpm2:"selector=TPMAlgECDH"`
-	KDF1SP80056A *TPMSKDFSchemeKDF1SP80056A `tpm2:"selector=TPMAlgKDF1SP80056A"`
-	KDF2         *TPMSKDFSchemeKDF2         `tpm2:"selector=TPMAlgKDF2"`
-	KDF1SP800108 *TPMSKDFSchemeKDF1SP800108 `tpm2:"selector=TPMAlgKDF1SP80056A"`
+	MGF1         *TPMSKDFSchemeMGF1         `tpm2:"selector=0x0007"` // TPM_ALG_MGF1
+	ECDH         *TPMSKDFSchemeECDH         `tpm2:"selector=0x0019"` // TPM_ALG_ECDH
+	KDF1SP80056A *TPMSKDFSchemeKDF1SP80056A `tpm2:"selector=0x0020"` // TPM_ALG_KDF1_SP800_56A
+	KDF2         *TPMSKDFSchemeKDF2         `tpm2:"selector=0x0021"` // TPM_ALG_KDF2
+	KDF1SP800108 *TPMSKDFSchemeKDF1SP800108 `tpm2:"selector=0x0022"` // TPM_ALG_KDF1_SP800_108
 }
 
 // 11.2.3.3
@@ -420,12 +420,12 @@ type TPMTKDFScheme struct {
 // 11.2.3.5
 type TPMUAsymScheme struct {
 	// TODO every asym scheme gets an entry in this union.
-	RSASSA *TPMSSigSchemeRSASSA `tpm2:"selector=TPMAlgRSASSA"`
-	RSAES  *TPMSEncSchemeRSAES  `tpm2:"selector=TPMAlgRSAES"`
-	RSAPSS *TPMSSigSchemeRSAPSS `tpm2:"selector=TPMAlgRSAPSS"`
-	OAEP   *TPMSEncSchemeOAEP   `tpm2:"selector=TPMAlgOAEP"`
-	ECDSA  *TPMSSigSchemeECDSA  `tpm2:"selector=TPMAlgECDSA"`
-	ECDH   *TPMSKeySchemeECDH   `tpm2:"selector=TPMAlgECDH"`
+	RSASSA *TPMSSigSchemeRSASSA `tpm2:"selector=0x0014"` // TPM_ALG_RSASSA
+	RSAES  *TPMSEncSchemeRSAES  `tpm2:"selector=0x0015"` // TPM_ALG_RSAES
+	RSAPSS *TPMSSigSchemeRSAPSS `tpm2:"selector=0x0016"` // TPM_ALG_RSAPSS
+	OAEP   *TPMSEncSchemeOAEP   `tpm2:"selector=0x0017"` // TPM_ALG_OAEP
+	ECDSA  *TPMSSigSchemeECDSA  `tpm2:"selector=0x0018"` // TPM_ALG_ECDSA
+	ECDH   *TPMSKeySchemeECDH   `tpm2:"selector=0x0019"` // TPM_ALG_ECDH
 }
 
 // 11.2.4.1
@@ -475,10 +475,10 @@ type TPMIAlgPublic = TPMAlgID
 
 // 12.2.3.2
 type TPMUPublicID struct {
-	KeyedHash *TPM2BDigest       `tpm2:"selector=TPMAlgKeyedHash"`
-	Sym       *TPM2BDigest       `tpm2:"selector=TPMAlgSymCipher"`
-	RSA       *TPM2BPublicKeyRSA `tpm2:"selector=TPMAlgRSA"`
-	ECC       *TPMSECCPoint      `tpm2:"selector=TPMAlgECC"`
+	KeyedHash *TPM2BDigest       `tpm2:"selector=0x0008"` // TPM_ALG_KEYEDHASH
+	Sym       *TPM2BDigest       `tpm2:"selector=0x0025"` // TPM_ALG_SYMCIPHER
+	RSA       *TPM2BPublicKeyRSA `tpm2:"selector=0x0001"` // TPM_ALG_RSA
+	ECC       *TPMSECCPoint      `tpm2:"selector=0x0023"` // TPM_ALG_ECC
 }
 
 // 12.2.3.3
@@ -535,13 +535,13 @@ type TPMSECCParms struct {
 // 12.2.3.7
 type TPMUPublicParms struct {
 	// sign | decrypt | neither
-	KeyedHashDetail *TPMSKeyedHashParms `tpm2:"selector=TPMAlgKeyedHash"`
+	KeyedHashDetail *TPMSKeyedHashParms `tpm2:"selector=0x0008"` // TPM_ALG_KEYEDHASH
 	// sign | decrypt | neither
-	SymCipherDetail *TPMSSymCipherParms `tpm2:"selector=TPMAlgSymCipher"`
+	SymCipherDetail *TPMSSymCipherParms `tpm2:"selector=0x0025"` // TPM_ALG_SYMCIPHER
 	// decrypt + sign
-	RSADetail *TPMSRSAParms `tpm2:"selector=TPMAlgRSA"`
+	RSADetail *TPMSRSAParms `tpm2:"selector=0x0001"` // TPM_ALG_RSA
 	// decrypt + sign
-	ECCDetail *TPMSECCParms `tpm2:"selector=TPMAlgECC"`
+	ECCDetail *TPMSECCParms `tpm2:"selector=0x0023"` // TPM_ALG_ECC
 }
 
 // 12.2.4
