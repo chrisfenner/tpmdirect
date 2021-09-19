@@ -29,9 +29,9 @@ type Session interface {
 	// there is another session (or sessions) for parameter
 	// encryption and decryption, then decrypt and encrypt are non-nil
 	// and contain nonceTPM from each of those sessions, respectively.
-	Authorize(cc tpm2.TPMCC, parms, decrypt, encrypt []byte, names []tpm2.TPM2BName) (*tpm2.TPMSAuthCommand, error)
+	Authorize(cc TPMCC, parms, decrypt, encrypt []byte, names []TPM2BName) (*TPMSAuthCommand, error)
 	// Validates the response HMAC for the session.
-	Validate(rc tpm2.TPMRC, cc tpm2.TPMCC, parms []byte, auth tpm2.TPMSAuthResponse) error
+	Validate(rc TPMRC, cc TPMCC, parms []byte, auth TPMSAuthResponse) error
 	// Returns true if this is an encryption session.
 	IsEncryption() bool
 	// Returns true if this is a decryption session.

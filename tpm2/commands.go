@@ -43,7 +43,7 @@ type CreateCommand struct {
 	CreationPCR TPMLPCRSelection
 }
 
-func (_ *CreateCommand) Command() { return TPMCCCreate }
+func (_ *CreateCommand) Command() TPMCC { return TPMCCCreate }
 
 type CreateResponse struct {
 	// the private portion of the object
@@ -59,7 +59,7 @@ type CreateResponse struct {
 	CreationTicket TPMTTKCreation
 }
 
-func (_ *CreateResponse) Response() { return TPMCCCreate }
+func (_ *CreateResponse) Response() TPMCC { return TPMCCCreate }
 
 // 12.2
 type LoadCommand struct {
@@ -71,7 +71,7 @@ type LoadCommand struct {
 	InPublic TPM2BPublic
 }
 
-func (_ LoadCommand) Command() { return TPMCCLoad }
+func (_ LoadCommand) Command() TPMCC { return TPMCCLoad }
 
 type LoadResponse struct {
 	// handle of type TPM_HT_TRANSIENT for loaded object
@@ -80,20 +80,20 @@ type LoadResponse struct {
 	Name TPM2BName
 }
 
-func (_ *LoadResponse) Response() { return TPMCCLoad }
+func (_ *LoadResponse) Response() TPMCC { return TPMCCLoad }
 
 // 12.7
 type UnsealCommand struct {
 	ItemHandle NamedHandle `tpm2:"handle,auth"`
 }
 
-func (_ UnsealCommand) Command() { return TPMCCUnseal }
+func (_ UnsealCommand) Command() TPMCC { return TPMCCUnseal }
 
 type UnsealResponse struct {
 	OutData TPM2BSensitiveData
 }
 
-func (_ *UnsealResponse) Response() { return TPMCCUnseal }
+func (_ *UnsealResponse) Response() TPMCC { return TPMCCUnseal }
 
 // 24.1
 type CreatePrimaryCommand struct {
@@ -112,7 +112,7 @@ type CreatePrimaryCommand struct {
 	CreationPCR TPMLPCRSelection
 }
 
-func (_ CreatePrimaryCommand) Command() { return TPMCCCreatePrimary }
+func (_ CreatePrimaryCommand) Command() TPMCC { return TPMCCCreatePrimary }
 
 type CreatePrimaryResponse struct {
 	// handle of type TPM_HT_TRANSIENT for created Primary Object
@@ -130,7 +130,7 @@ type CreatePrimaryResponse struct {
 	Name TPM2BName
 }
 
-func (_ *CreatePrimaryResponse) Response() { return TPMCCCreatePrimary }
+func (_ *CreatePrimaryResponse) Response() TPMCC { return TPMCCCreatePrimary }
 
 // 28.4
 type FlushContextCommand struct {
@@ -138,9 +138,9 @@ type FlushContextCommand struct {
 	FlushHandle TPMIDHContext
 }
 
-func (_ FlushContextCommand) Command() { return TPMCCFlushContext }
+func (_ FlushContextCommand) Command() TPMCC { return TPMCCFlushContext }
 
-type CreatePrimaryResponse struct {
+type FlushContextResponse struct {
 }
 
-func (_ *FlushContextResponse) Response() { return TPMCCFlushContext }
+func (_ *FlushContextResponse) Response() TPMCC { return TPMCCFlushContext }

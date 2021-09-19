@@ -32,6 +32,12 @@ type TPMAlgID uint16
 // 6.4
 type TPMECCCurve uint16
 
+// 6.5.2
+type TPMCC uint32
+
+// 6.6
+type TPMRC uint32
+
 // 6.9
 type TPMST uint16
 
@@ -180,6 +186,17 @@ type TPMASession struct {
 	Audit uint8 `tpm2:"bit=7"`
 }
 
+// 8.5
+type TPMALocality struct {
+	TPMLocZero  uint8 `tpm2:"bit=0"`
+	TPMLocOne   uint8 `tpm2:"bit=1"`
+	TPMLocTwo   uint8 `tpm2:"bit=2"`
+	TPMLocThree uint8 `tpm2:"bit=3"`
+	TPMLocFour  uint8 `tpm2:"bit=4"`
+	// If any of these bits is set, an extended locality is indicated
+	Extended uint8 `tpm2:"bit=7:5"`
+}
+
 // 9.3
 type TPMIDHObject = TPMHandle
 
@@ -189,17 +206,23 @@ type TPMISHAuthSession = TPMHandle
 // 9.11
 type TPMIDHContext = TPMHandle
 
+// 9.13
+type TPMIRHHierarchy = TPMHandle
+
 // 9.27
 type TPMIAlgHash = TPMAlgID
 
 // 9.30
 type TPMIAlgSymObject = TPMAlgID
 
+// 9.31
+type TPMIAlgSymMode = TPMAlgID
+
 // 9.32
 type TPMIAlgKDF = TPMAlgID
 
 // 9.35
-type TPMISTCommandCode = TPMST
+type TPMISTCommandTag = TPMST
 
 // 10.1
 type TPMSEmpty = struct{}
@@ -225,6 +248,27 @@ type TPM2BAuth TPM2BDigest
 // all TPMDirect helpers that deal with names will deal with them as so.
 type TPM2BName TPM2BData
 
+// 10.6.2
+type TPMSPCRSelection struct {
+	Hash      TPMIAlgHash
+	PCRSelect TPM2BData
+}
+
+// 10.7.3
+type TPMTTKCreation struct {
+	// ticket structure tag
+	Tag TPMST
+	// the hierarchy containing name
+	Hierarchy TPMIRHHierarchy
+	// This shall be the HMAC produced using a proof value of hierarchy.
+	Digest TPM2BDigest
+}
+
+// 10.9.7
+type TPMLPCRSelection struct {
+	PCRSelections []TPMSPCRSelection `tpm2:"list"`
+}
+
 // 10.13.2
 type TPMSAuthCommand struct {
 	handle        TPMISHAuthSession
@@ -244,8 +288,24 @@ type TPMSAuthResponse struct {
 type TPMUSymKeyBits struct {
 	// TODO: The rest of the symmetric algorithms get their own entry
 	// in this union.
-	AES TPMKeyBits  `tpm2:"selector=TPMAlgAES"`
-	XOR TPMIAlgHash `tpm2:"selector=TPMAlgXOR"`
+	AES *TPMKeyBits  `tpm2:"selector=TPMAlgAES"`
+	XOR *TPMIAlgHash `tpm2:"selector=TPMAlgXOR"`
+}
+
+// 11.1.4
+type TPMUSymMode struct {
+	// TODO: The rest of the symmetric algorithms get their own entry
+	// in this union.
+	AES *TPMIAlgSymMode `tpm2:"selector=TPMAlgAES"`
+	XOR *struct{}       `tpm2:"selector=TPMAlgXOR"`
+}
+
+// 11.1.5
+type TPMUSymDetails struct {
+	// TODO: The rest of the symmetric algorithms get their own entry
+	// in this union.
+	AES *struct{} `tpm2:"selector=TPMAlgAES"`
+	XOR *struct{} `tpm2:"selector=TPMAlgXOR"`
 }
 
 // 11.1.7
@@ -293,6 +353,9 @@ type TPMSSchemeHash struct {
 	HashAlg TPMIAlgHash
 }
 
+// 11.1.10
+type TPMIAlgKeyedHashScheme = TPMAlgID
+
 // 11.1.20
 type TPMSSchemeHMAC TPMSSchemeHash
 
@@ -333,9 +396,9 @@ type TPMSKeySchemeECDH TPMSSchemeHash
 // 11.2.3.1
 type TPMSKDFSchemeMGF1 TPMSSchemeHash
 type TPMSKDFSchemeECDH TPMSSchemeHash
-type TPMSKDFSchemeSP80056A TPMSSchemeHash
+type TPMSKDFSchemeKDF1SP80056A TPMSSchemeHash
 type TPMSKDFSchemeKDF2 TPMSSchemeHash
-type TPMSKDFSchemeSP800108 TPMSSchemeHash
+type TPMSKDFSchemeKDF1SP800108 TPMSSchemeHash
 
 // 11.2.3.2
 type TPMUKDFScheme struct {
@@ -392,6 +455,9 @@ type TPMSECCPoint struct {
 	// Y coordinate
 	Y TPM2BECCParameter
 }
+
+// 11.2.5.4
+type TPMIAlgECCScheme = TPMAlgID
 
 // 11.2.5.5
 type TPMIECCCurve = TPMECCCurve
@@ -501,4 +567,31 @@ type TPMTPublic struct {
 type TPM2BPublic struct {
 	// the public area
 	PublicArea TPMTPublic `tpm2:"sized"`
+}
+
+// 12.3.7
+type TPM2BPrivate TPM2BData
+
+// 15.1
+type TPMSCreationData struct {
+	// list indicating the PCR included in pcrDigest
+	PCRSelect TPMLPCRSelection
+	// digest of the selected PCR using nameAlg of the object for which
+	// this structure is being created
+	PCRDigest TPM2BDigest
+	// the locality at which the object was created
+	Locality TPMALocality
+	// nameAlg of the parent
+	ParentNameAlg TPMAlgID
+	// Name of the parent at time of creation
+	ParentName TPM2BName
+	// Qualified Name of the parent at the time of creation
+	ParentQualifiedName TPM2BName
+	// association with additional information added by the key
+	OutsideInfo TPM2BData
+}
+
+// 15.2
+type TPM2BCreationData struct {
+	CreationData TPMSCreationData `tpm2:"sized"`
 }
