@@ -25,23 +25,26 @@ type TPM struct {
 	transport tpm2.Transport
 }
 
-// OpenTPM opens a TPM connection on the provided transport.
-// Takes ownership of the provided transport.
+// Open opens a TPM connection using the provided transport open function.
 // When this TPM connection is closed, the transport is closed.
-func OpenTPM(transport tpm2.Transport) TPM {
-	return TPM{
-		transport: transport,
+func Open(opener func()(tpm2.Transport, error)) (*TPM, error) {
+	t, err := opener()
+	if err != nil {
+		return nil, err
 	}
+	return &TPM{
+		transport: t,
+	}, nil
 }
 
 // Close closes the connection to the TPM and its underlying
 // transport.
-func (t TPM) Close() error {
+func (t *TPM) Close() error {
 	return t.transport.Close()
 }
 
 // Execute sends the provided command and returns the provided response.
-func (t TPM) Execute(cmd tpm2.Command, rsp tpm2.Response, sess ...tpm2.Session) error {
+func (t *TPM) Execute(cmd tpm2.Command, rsp tpm2.Response, sess ...tpm2.Session) error {
 	cc := cmd.Command()
 	if rsp.Response() != cc {
 		panic(fmt.Sprintf("cmd and rsp must be for same command: %v != %v", cc, rsp.Response()))
@@ -114,7 +117,7 @@ func marshal(buf *bytes.Buffer, vs ...reflect.Value) {
 		case reflect.Struct:
 			marshalStruct(buf, v)
 		default:
-			panic(fmt.Sprintf("not marshallable: %v", v))
+			panic(fmt.Sprintf("not marshallable: %#v", v))
 		}
 	}
 }
@@ -126,8 +129,12 @@ func marshalNumeric(buf *bytes.Buffer, v reflect.Value) {
 }
 
 func marshalArray(buf *bytes.Buffer, v reflect.Value) {
-	if err := binary.Write(buf, binary.BigEndian, v.Interface()); err != nil {
-		panic(err)
+	// binary.Write knows how to marshal slices of fixed-sized values, but not dynamic-sized values
+	// Iterate the contents and binary.Write them one at a time.
+	for i := 0; i < v.Len(); i++ {
+		if err := binary.Write(buf, binary.BigEndian, v.Index(i).Interface()); err != nil {
+			panic(fmt.Sprintf("marshalling element %d of %v: %v", i, v.Type(), err))
+		}
 	}
 }
 
@@ -249,17 +256,25 @@ func marshalBitwise(buf *bytes.Buffer, v reflect.Value) {
 }
 
 // Marshals the member of the given union struct corresponding to the given selector.
+// Marshals nothing if the selector is equal to TPM_ALG_NULL (0x0010)
 // May panic in the following situations:
 // The passed-in value is not a union struct (i.e., a structure of all pointer members with selector tags)
 // The passed-in selector value is not handled in any case in the union
 // The selected value in the passed-in struct is nil
 func marshalUnion(buf *bytes.Buffer, v reflect.Value, selector int64) {
+	// Special case: TPM_ALG_NULL as a selector means marshal nothing
+	if selector == int64(tpm2.TPMAlgNull) {
+		return
+	}
 	for i := 0; i < v.NumField(); i++ {
 		sel, ok := numericTag(v.Type().Field(i), "selector")
 		if !ok {
 			panic(fmt.Sprintf("'%v' union member '%v' did not have a selector tag", v.Type().Name(), v.Type().Field(i).Name))
 		}
 		if sel == selector {
+			if v.Field(i).IsNil() {
+				panic(fmt.Sprintf("'%v' union member '%v' selected, but was nil", v.Type().Name(), v.Type().Field(i).Name))
+			}
 			marshal(buf, v.Field(i).Elem())
 			return
 		}
@@ -462,11 +477,16 @@ func unmarshalBitwise(buf *bytes.Buffer, v reflect.Value) error {
 }
 
 // Unmarshals the member of the given union struct corresponding to the given selector.
+// Unmarshals nothing if the selector is TPM_ALG_NULL (0x0010)
 // May panic in the following situations:
 // The passed-in value is not a union struct (i.e., a structure of all pointer members with selector tags)
 // The passed-in selector value is not handled in any case in the union
 // The selected value in the passed-in struct is nil
 func unmarshalUnion(buf *bytes.Buffer, v reflect.Value, selector int64) error {
+	// Special case: TPM_ALG_NULL as a selector means unmarshal nothing
+	if selector == int64(tpm2.TPMAlgNull) {
+		return nil
+	}
 	for i := 0; i < v.NumField(); i++ {
 		sel, ok := numericTag(v.Type().Field(i), "selector")
 		if !ok {
@@ -679,7 +699,7 @@ func cmdSessions(sess []tpm2.Session, cc tpm2.TPMCC, names []tpm2.TPM2BName, par
 		if err != nil {
 			return nil, fmt.Errorf("session %d: %w", i, err)
 		}
-		marshal(buf, reflect.ValueOf(auth))
+		marshal(buf, reflect.ValueOf(auth).Elem())
 	}
 
 	result := buf.Bytes()

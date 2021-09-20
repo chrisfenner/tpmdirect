@@ -1,9 +1,6 @@
 package tpm2
 
 var (
-	// TODO: Nicer way to provide concrete values.
-	bits128 TPMKeyBits = 128
-	cfb     TPMAlgID   = TPMAlgCFB
 	// https://trustedcomputinggroup.org/wp-content/uploads/TCG-TPM-v2.0-Provisioning-Guidance-Published-v1r1.pdf
 	RSASRKTemplate = TPM2BPublic{
 		PublicArea: TPMTPublic{
@@ -27,16 +24,24 @@ var (
 					Symmetric: TPMTSymDefObject{
 						Algorithm: TPMAlgAES,
 						KeyBits: TPMUSymKeyBits{
-							AES: &bits128,
+							AES: NewTPMKeyBits(128),
 						},
 						Mode: TPMUSymMode{
-							AES: &cfb,
+							AES: NewTPMAlgID(TPMAlgCFB),
+						},
+						Details: TPMUSymDetails{
+							AES: &struct{}{},
 						},
 					},
 					Scheme: TPMTRSAScheme{
 						Scheme: TPMAlgNull,
 					},
 					KeyBits: 2048,
+				},
+			},
+			Unique: TPMUPublicID{
+				RSA: &TPM2BPublicKeyRSA{
+					Buffer: make([]byte, 256),
 				},
 			},
 		},
