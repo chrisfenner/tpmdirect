@@ -265,13 +265,9 @@ func marshalUnion(buf *bytes.Buffer, v reflect.Value, selector int64) {
 
 // unmarshal will deserialize the given values from the given buffer.
 // Returns an error if the buffer does not contain enough data to satisfy the type.
-// panics if a non-pointer value is passed, or the values are not marshallable types.
+// panics if a non-settable value is passed, or the values are not marshallable types.
 func unmarshal(buf *bytes.Buffer, vs ...reflect.Value) error {
-	for _, vptr := range vs {
-		if vptr.Kind() != reflect.Ptr {
-			panic(fmt.Sprintf("non-pointer value passed to unmarshal: %v", vptr.Type()))
-		}
-		v := vptr.Elem()
+	for _, v := range vs {
 		switch v.Kind() {
 		case reflect.Bool, reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64, reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
 			return unmarshalNumeric(buf, v)
@@ -298,14 +294,14 @@ func unmarshal(buf *bytes.Buffer, vs ...reflect.Value) error {
 		case reflect.Struct:
 			return unmarshalStruct(buf, v)
 		default:
-			panic(fmt.Sprintf("not marshallable: %v", v.Type()))
+			panic(fmt.Sprintf("not unmarshallable: %v", v.Type()))
 		}
 	}
 	return nil
 }
 
 func unmarshalNumeric(buf *bytes.Buffer, v reflect.Value) error {
-	return binary.Read(buf, binary.BigEndian, v.Interface())
+	return binary.Read(buf, binary.BigEndian, v.Addr().Interface())
 }
 
 // For slices, the slice's length must already be set to the expected amount of data.
