@@ -149,6 +149,7 @@ func TestMarshalUnion(t *testing.T) {
 		Value      unionValue `tpm2:"tag=Type"`
 	}
 	eight := uint8(8)
+	sixtyFour := uint64(64)
 	cases := []struct {
 		Name          string
 		Data          unionEnvelope
@@ -165,6 +166,35 @@ func TestMarshalUnion(t *testing.T) {
 			},
 			Serialization: []byte{
 				0x08, 0xab, 0xcd, 0x12, 0x34, 0x08,
+			},
+		},
+		{
+			Name: "64",
+			Data: unionEnvelope{
+				Type:       64,
+				OtherThing: 0xffffffff,
+				Value: unionValue{
+					Val64: &sixtyFour,
+				},
+			},
+			Serialization: []byte{
+				0x40, 0xff, 0xff, 0xff, 0xff, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40,
+			},
+		},
+		{
+			Name: "Struct",
+			Data: unionEnvelope{
+				Type:       5,
+				OtherThing: 0x11111111,
+				Value: unionValue{
+					ValStruct: &valStruct{
+						First:  true,
+						Second: 65537,
+					},
+				},
+			},
+			Serialization: []byte{
+				0x05, 0x11, 0x11, 0x11, 0x11, 0x01, 0x00, 0x01, 0x00, 0x01,
 			},
 		},
 	}
