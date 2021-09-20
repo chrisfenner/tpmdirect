@@ -68,3 +68,38 @@ func TestMarshalArray(t *testing.T) {
 		})
 	}
 }
+
+func TestMarshalSlice(t *testing.T) {
+	// Slices in reflect/tpmdirect must be tagged marshalled/unmarshalled as
+	// part of a struct with the 'list' tag
+	type sliceWrapper struct {
+		Elems []uint32 `tpm2:"list"`
+	}
+	vals := []struct {
+		Name          string
+		Data          sliceWrapper
+		Serialization []byte
+	}{
+		{"3", sliceWrapper{[]uint32{1, 2, 3}}, []byte{0, 0, 0, 3, 0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0, 3}},
+		{"1", sliceWrapper{[]uint32{4}}, []byte{0, 0, 0, 1, 0, 0, 0, 4}},
+		{"empty", sliceWrapper{[]uint32{}}, []byte{0, 0, 0, 0}},
+	}
+	for _, val := range vals {
+		v, want := val.Data, val.Serialization
+		t.Run(val.Name, func(t *testing.T) {
+			var buf bytes.Buffer
+			marshal(&buf, reflect.ValueOf(v))
+			if !bytes.Equal(buf.Bytes(), want) {
+				t.Errorf("want %x got %x", want, buf.Bytes())
+			}
+			got := reflect.New(reflect.TypeOf(v))
+			err := unmarshal(&buf, got.Elem())
+			if err != nil {
+				t.Fatalf("want nil, got %v", err)
+			}
+			if !cmp.Equal(v, got.Elem().Interface()) {
+				t.Errorf("want %#v, got %#v\n%v", v, got.Elem().Interface(), cmp.Diff(v, got.Elem().Interface()))
+			}
+		})
+	}
+}

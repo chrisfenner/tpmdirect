@@ -184,7 +184,7 @@ func marshalStruct(buf *bytes.Buffer, v reflect.Value) {
 		// some unnecessary copying before talking to a low-speed device like a TPM)
 		var res bytes.Buffer
 		if list {
-			binary.Write(&res, binary.BigEndian, v.Len())
+			binary.Write(&res, binary.BigEndian, uint32(v.Field(i).Len()))
 		}
 		if tag != "" {
 			// Check that the tagged value was present (and numeric and smaller than MaxInt64)
@@ -273,7 +273,7 @@ func unmarshal(buf *bytes.Buffer, vs ...reflect.Value) error {
 			return unmarshalNumeric(buf, v)
 		case reflect.Slice:
 			var length uint32
-			err := unmarshalNumeric(buf, reflect.ValueOf(&length))
+			err := unmarshalNumeric(buf, reflect.ValueOf(&length).Elem())
 			if err != nil {
 				return fmt.Errorf("deserializing size for field of type '%v': %w", v.Type(), err)
 			}
@@ -283,7 +283,7 @@ func unmarshal(buf *bytes.Buffer, vs ...reflect.Value) error {
 			// Go's reflect library doesn't allow increasing the capacity of an existing slice.
 			// Since we can't be sure that the capacity of the passed-in value was enough, allocate
 			// a new temporary one of the correct length, unmarshal to it, and swap it in.
-			tmp := reflect.MakeSlice(v.Type().Elem(), int(length), int(length))
+			tmp := reflect.MakeSlice(v.Type(), int(length), int(length))
 			if err := unmarshalArray(buf, tmp); err != nil {
 				return err
 			}
@@ -354,11 +354,11 @@ func unmarshalStruct(buf *bytes.Buffer, v reflect.Value) error {
 	}
 	for i := 0; i < v.NumField(); i++ {
 		list := hasTag(v.Type().Field(i), "list")
-		if list && (v.Kind() != reflect.Slice) {
+		if list && (v.Field(i).Kind() != reflect.Slice) {
 			panic(fmt.Sprintf("field '%v' of struct '%v' had the 'list' tag but was not a slice",
 				v.Type().Field(i).Name, v.Type().Name()))
 		}
-		if !list && (v.Kind() == reflect.Slice) {
+		if !list && (v.Field(i).Kind() == reflect.Slice) {
 			panic(fmt.Sprintf("field '%v' of struct '%v' was a slice but did not have the 'list' tag",
 				v.Type().Field(i).Name, v.Type().Name()))
 		}
