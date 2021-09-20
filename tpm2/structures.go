@@ -7,6 +7,12 @@ type TPMCmdHeader struct {
 	CommandCode TPMCC
 }
 
+type TPMRspHeader struct {
+	Tag          TPMISTCommandTag
+	Length       uint16
+	ResponseCode TPMRC
+}
+
 // 5.3
 
 // this is the 1.2 compatible form of the TPM_ALG_ID

@@ -75,19 +75,22 @@ func (t TPM) Execute(cmd tpm2.Command, rsp tpm2.Response, sess ...tpm2.Session) 
 	}
 
 	// Parse the command directly into the response structure.
-	err = rspHeader(&response)
+	rspBuf := bytes.NewBuffer(response)
+	err = rspHeader(rspBuf)
 	if err != nil {
 		return err
 	}
-	err = rspHandles(&response, rsp)
+	err = rspHandles(rspBuf, rsp)
 	if err != nil {
 		return err
 	}
-	rspParms, err := rspParametersArea(&response)
+	rspParms, err := rspParametersArea(rspBuf)
 	if err != nil {
 		return err
 	}
-	err = rspSessions(&response, rspParms, sess)
+	// We don't need the TPM RC here because we would have errored out from rspHeader
+	// TODO: Authenticate the error code with sessions, if desired.
+	err = rspSessions(rspBuf, tpm2.TPMRCSuccess, cc, rspParms, sess)
 	if err != nil {
 		return err
 	}
@@ -669,7 +672,7 @@ func cmdSessions(sess []tpm2.Session, cc tpm2.TPMCC, names []tpm2.TPM2BName, par
 
 	buf := bytes.NewBuffer(make([]byte, 0, 1024))
 	// Skip space to write the size later
-	buf.Next(2)
+	buf.Next(4)
 	// Calculate the authorization HMAC for each session
 	for i, s := range sess {
 		auth, err := s.Authorize(cc, parms, encNonceTPM, decNonceTPM, names)
@@ -681,7 +684,7 @@ func cmdSessions(sess []tpm2.Session, cc tpm2.TPMCC, names []tpm2.TPM2BName, par
 
 	result := buf.Bytes()
 	// Write the size
-	binary.BigEndian.PutUint16(result[0:], uint16(buf.Len()))
+	binary.BigEndian.PutUint32(result[0:], uint32(buf.Len()))
 
 	return result, nil
 }
@@ -705,8 +708,14 @@ func cmdHeader(hasSessions bool, length int, cc tpm2.TPMCC) []byte {
 // rspHeader parses the response header. If the TPM returned an error,
 // returns an error here.
 // rsp is updated to point to the rest of the response after the header.
-func rspHeader(rsp *[]byte) error {
-	// TODO
+func rspHeader(rsp *bytes.Buffer) error {
+	var hdr tpm2.TPMRspHeader
+	if err := unmarshal(rsp, reflect.ValueOf(&hdr).Elem()); err != nil {
+		return fmt.Errorf("unmarshalling TPM response: %w", err)
+	}
+	if hdr.ResponseCode != tpm2.TPMRCSuccess {
+		return hdr.ResponseCode
+	}
 	return nil
 }
 
@@ -714,8 +723,13 @@ func rspHeader(rsp *[]byte) error {
 // If there is a mismatch between the expected and actual amount of handles,
 // returns an error here.
 // rsp is updated to point to the rest of the response after the handles.
-func rspHandles(rsp *[]byte, rspStruct tpm2.Response) error {
-	// TODO
+func rspHandles(rsp *bytes.Buffer, rspStruct tpm2.Response) error {
+	handles := taggedMembers(reflect.ValueOf(rspStruct).Elem(), "handle", false)
+	for i, handle := range handles {
+		if err := unmarshal(rsp, handle); err != nil {
+			return fmt.Errorf("unmarshalling handle %v: %w", i, err)
+		}
+	}
 	return nil
 }
 
@@ -723,17 +737,44 @@ func rspHandles(rsp *[]byte, rspStruct tpm2.Response) error {
 // from the command. If there is a mismatch between the response's
 // indicated parameters area size and the actual size, returns an error here.
 // rsp is updated to point to the rest of the response after the handles.
-func rspParametersArea(rsp *[]byte) ([]byte, error) {
-	// TODO
-	return nil, nil
+func rspParametersArea(rsp *bytes.Buffer) ([]byte, error) {
+	var length uint32
+	if err := binary.Read(rsp, binary.BigEndian, &length); err != nil {
+		return nil, fmt.Errorf("reading length of parameter area: %w", err)
+	}
+	if length > uint32(rsp.Len()) {
+		return nil, fmt.Errorf("response indicated %d bytes of parameters but there "+
+			"were only %d more bytes of response", length, rsp.Len())
+	}
+	if length > math.MaxInt32 {
+		return nil, fmt.Errorf("invalid length of parameter area: %d", length)
+	}
+	parms := make([]byte, int(length))
+	if n, err := rsp.Read(parms); err != nil {
+		return nil, fmt.Errorf("reading parameter area: %w", err)
+	} else if n != len(parms) {
+		return nil, fmt.Errorf("only read %d bytes of parameters, expected %d", n, len(parms))
+	}
+	return parms, nil
 }
 
 // rspSessions fetches the sessions area of the response and updates all
 // the sessions with it. If there is a response validation error, returns
 // an error here.
 // rsp is updated to point to the rest of the response after the sessions.
-func rspSessions(rsp *[]byte, parms []byte, sess []tpm2.Session) error {
-	// TODO
+func rspSessions(rsp *bytes.Buffer, rc tpm2.TPMRC, cc tpm2.TPMCC, parms []byte, sess []tpm2.Session) error {
+	for i, s := range sess {
+		var auth tpm2.TPMSAuthResponse
+		if err := unmarshal(rsp, reflect.ValueOf(&auth).Elem()); err != nil {
+			return fmt.Errorf("reading auth session %d: %w", i, err)
+		}
+		if err := s.Validate(rc, cc, parms, &auth); err != nil {
+			return fmt.Errorf("validating auth session %d: %w", i, err)
+		}
+	}
+	if rsp.Len() != 0 {
+		return fmt.Errorf("%d unaccounted-for bytes at the end of the TPM response", rsp.Len())
+	}
 	return nil
 }
 
@@ -741,6 +782,25 @@ func rspSessions(rsp *[]byte, parms []byte, sess []tpm2.Session) error {
 // into the response structure. If there is a mismatch between the expected
 // and actual response structure, returns an error here.
 func rspParameters(parms []byte, sess []tpm2.Session, rspStruct tpm2.Response) error {
-	// TODO
+	// Use the heuristic of "does interpreting the first 2 bytes of response as a length
+	// make any sense" to attempt encrypted paramter decryption.
+	// If the command supports parameter encryption, the first paramter is a 2B
+	if len(parms) < 2 {
+		return nil
+	}
+	length := binary.BigEndian.Uint16(parms[0:])
+	// TODO: Make this nice using structure tagging.
+	if int(length)+2 > len(parms) {
+		// Assume this means the command does not support parameter encryption.
+		return nil
+	}
+	for i, s := range sess {
+		if !s.IsEncryption() {
+			continue
+		}
+		if err := s.Decrypt(parms[2 : 2+length]); err != nil {
+			return fmt.Errorf("decrypting first parameter with session %d: %w", i, err)
+		}
+	}
 	return nil
 }
