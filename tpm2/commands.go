@@ -76,7 +76,7 @@ func (_ LoadCommand) Command() TPMCC { return TPMCCLoad }
 
 type LoadResponse struct {
 	// handle of type TPM_HT_TRANSIENT for loaded object
-	ObjectHandle TPMHandle
+	ObjectHandle TPMHandle `tpmdirect:"handle"`
 	// Name of the loaded object
 	Name TPM2BName
 }

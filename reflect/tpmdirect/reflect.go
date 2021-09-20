@@ -655,6 +655,9 @@ func cmdNames(cmd tpm2.Command) []tpm2.TPM2BName {
 // The first parameter may be encrypted by one of the sessions.
 func cmdParameters(cmd tpm2.Command, sess []tpm2.Session) ([]byte, error) {
 	parms := taggedMembers(reflect.ValueOf(cmd).Elem(), "handle", true)
+	if len(parms) == 0 {
+		return nil, nil
+	}
 
 	// Marshal the first parameter for in-place session encryption.
 	var firstParm bytes.Buffer
