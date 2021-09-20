@@ -1,4 +1,4 @@
-package tpmdirect_test
+package sealing_test
 
 import (
 	"testing"
@@ -15,26 +15,26 @@ func TestCreateSRK(t *testing.T) {
 	}
 	defer tpm.Close()
 	var srk tpm2.TPMHandle
-	t.Run("CreateSRK", func(t *testing.T) {
-		cmd := tpm2.CreatePrimaryCommand{
-			PrimaryHandle: tpm2.NamedPrimaryHandle(tpm2.TPMRHOwner),
-			InPublic:      tpm2.RSASRKTemplate,
-		}
-		var rsp tpm2.CreatePrimaryResponse
-		if err := tpm.Execute(&cmd, &rsp, tpm2.PasswordSession(nil)); err != nil {
-			t.Fatalf("%v", err)
-		}
-		srk = rsp.ObjectHandle
-		t.Logf("SRK handle: %x\n", rsp.ObjectHandle)
-		t.Logf("SRK name: %x\n", rsp.Name)
-	})
-	t.Run("Flush", func(t *testing.T) {
-		cmd := tpm2.FlushContextCommand{
-			FlushHandle: srk,
-		}
-		var rsp tpm2.FlushContextResponse
-		if err := tpm.Execute(&cmd, &rsp); err != nil {
-			t.Fatalf("%v", err)
-		}
-	})
+
+	// Create the SRK
+	createCmd := tpm2.CreatePrimaryCommand{
+		PrimaryHandle: tpm2.NamedPrimaryHandle(tpm2.TPMRHOwner),
+		InPublic:      tpm2.RSASRKTemplate,
+	}
+	var createRsp tpm2.CreatePrimaryResponse
+	if err := tpm.Execute(&createCmd, &createRsp, tpm2.PasswordSession(nil)); err != nil {
+		t.Fatalf("%v", err)
+	}
+	srk = createRsp.ObjectHandle
+	t.Logf("SRK handle: %x\n", createRsp.ObjectHandle)
+	t.Logf("SRK name: %x\n", createRsp.Name)
+
+	// Flush the SRK
+	flushCmd := tpm2.FlushContextCommand{
+		FlushHandle: srk,
+	}
+	var flushRsp tpm2.FlushContextResponse
+	if err := tpm.Execute(&flushCmd, &flushRsp); err != nil {
+		t.Fatalf("%v", err)
+	}
 }
