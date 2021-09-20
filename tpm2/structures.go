@@ -3,13 +3,13 @@ package tpm2
 // Part 1 structures that aren't defined in Part 2
 type TPMCmdHeader struct {
 	Tag         TPMISTCommandTag
-	Length      uint16
+	Length      uint32
 	CommandCode TPMCC
 }
 
 type TPMRspHeader struct {
 	Tag          TPMISTCommandTag
-	Length       uint16
+	Length       uint32
 	ResponseCode TPMRC
 }
 

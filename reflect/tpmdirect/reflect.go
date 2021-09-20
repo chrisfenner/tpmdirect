@@ -66,7 +66,7 @@ func (t *TPM) Execute(cmd tpm2.Command, rsp tpm2.Response, sess ...tpm2.Session)
 	if err != nil {
 		return err
 	}
-	hdr := cmdHeader(hasSessions, len(handles)+len(sessions)+len(parms), cc)
+	hdr := cmdHeader(hasSessions, 10 /* size of command header */ + len(handles)+len(sessions)+len(parms), cc)
 	command := append(hdr, handles...)
 	command = append(command, sessions...)
 	command = append(command, parms...)
@@ -186,6 +186,9 @@ func marshalStruct(buf *bytes.Buffer, v reflect.Value) {
 		}
 	}
 	for i := 0; i < v.NumField(); i++ {
+		if hasTag(v.Type().Field(i), "skip") {
+			continue
+		}
 		list := hasTag(v.Type().Field(i), "list")
 		sized := hasTag(v.Type().Field(i), "sized")
 		tag := tags(v.Type().Field(i))["tag"]
@@ -358,6 +361,9 @@ func unmarshalStruct(buf *bytes.Buffer, v reflect.Value) error {
 		}
 	}
 	for i := 0; i < v.NumField(); i++ {
+		if hasTag(v.Type().Field(i), "skip") {
+			continue
+		}
 		list := hasTag(v.Type().Field(i), "list")
 		if list && (v.Field(i).Kind() != reflect.Slice) {
 			panic(fmt.Sprintf("field '%v' of struct '%v' had the 'list' tag but was not a slice",
@@ -717,7 +723,7 @@ func cmdHeader(hasSessions bool, length int, cc tpm2.TPMCC) []byte {
 	}
 	hdr := tpm2.TPMCmdHeader{
 		Tag:         tag,
-		Length:      uint16(length),
+		Length:      uint32(length),
 		CommandCode: cc,
 	}
 	buf := bytes.NewBuffer(make([]byte, 0, 8))

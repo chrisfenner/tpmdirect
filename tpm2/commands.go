@@ -24,7 +24,8 @@ type Response interface {
 // Convenience type for handles preceded by @ in Part 3
 type NamedHandle struct {
 	Handle TPMHandle
-	Name   []byte
+	// Convenience value for auth calculation. Not serialized.
+	Name   []byte `tpmdirect:"skip"`
 }
 
 // 12.1

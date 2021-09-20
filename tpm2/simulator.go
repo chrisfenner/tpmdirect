@@ -23,14 +23,17 @@ func LocalSimulator() (Transport, error) {
 }
 
 func (s *Simulator) Send(command []byte) ([]byte, error) {
-	if n, err := s.t.Write(command); err != nil {
+	n, err := s.t.Write(command)
+	if err != nil {
 		return nil, err
 	} else if n != len(command) {
 		return nil, fmt.Errorf("partial TPM write: only %d of %d bytes", n, len(command))
 	}
 	rsp := make([]byte, 4096)
-	n, err := s.t.Read(rsp)
-	if err != nil {
+	n, err = s.t.Read(rsp)
+	// An io.EOF after reading some data is OK.
+	// Any other type of error after reading some data, or io.EOF after reading no data, is an error.
+	if err != nil && !(n > 0 && err == io.EOF) {
 		return nil, err
 	}
 	return rsp[:n], nil

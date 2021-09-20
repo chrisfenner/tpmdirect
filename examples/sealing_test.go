@@ -13,6 +13,7 @@ func TestCreateSRK(t *testing.T) {
 	if err != nil {
 		t.Fatalf("could not connect to TPM simulator: %v", err)
 	}
+	defer tpm.Close()
 	var srk tpm2.TPMHandle
 	t.Run("CreateSRK", func(t *testing.T) {
 		cmd := tpm2.CreatePrimaryCommand{
