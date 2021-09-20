@@ -132,3 +132,47 @@ func TestMarshalBitfield(t *testing.T) {
 		marshalUnmarshal(t, v, want)
 	})
 }
+
+func TestMarshalUnion(t *testing.T) {
+	type valStruct struct {
+		First  bool
+		Second int32
+	}
+	type unionValue struct {
+		Val8      *uint8     `tpm2:"selector=8"`
+		Val64     *uint64    `tpm2:"selector=0x00000040"`
+		ValStruct *valStruct `tpm2:"selector=5"` // 5 for '5truct'
+	}
+	type unionEnvelope struct {
+		Type       uint8
+		OtherThing uint32
+		Value      unionValue `tpm2:"tag=Type"`
+	}
+	eight := uint8(8)
+	cases := []struct {
+		Name          string
+		Data          unionEnvelope
+		Serialization []byte
+	}{
+		{
+			Name: "8",
+			Data: unionEnvelope{
+				Type:       8,
+				OtherThing: 0xabcd1234,
+				Value: unionValue{
+					Val8: &eight,
+				},
+			},
+			Serialization: []byte{
+				0x08, 0xab, 0xcd, 0x12, 0x34, 0x08,
+			},
+		},
+	}
+
+	for _, c := range cases {
+		v, want := c.Data, c.Serialization
+		t.Run(c.Name, func(t *testing.T) {
+			marshalUnmarshal(t, v, want)
+		})
+	}
+}

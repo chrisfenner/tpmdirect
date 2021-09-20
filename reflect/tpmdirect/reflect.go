@@ -339,20 +339,6 @@ func unmarshalStruct(buf *bytes.Buffer, v reflect.Value) error {
 			return unmarshalBitwise(buf, v)
 		}
 	}
-	// Make a pass to create a map of tag values
-	// UInt64-valued fields with values greater than MaxInt64 cannot be selectors.
-	possibleSelectors := make(map[string]int64)
-	for i := 0; i < v.NumField(); i++ {
-		switch v.Field(i).Kind() {
-		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-			possibleSelectors[v.Type().Field(i).Name] = v.Field(i).Int()
-		case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-			val := v.Field(i).Uint()
-			if val <= math.MaxInt64 {
-				possibleSelectors[v.Type().Field(i).Name] = int64(val)
-			}
-		}
-	}
 	for i := 0; i < v.NumField(); i++ {
 		list := hasTag(v.Type().Field(i), "list")
 		if list && (v.Field(i).Kind() != reflect.Slice) {
@@ -383,6 +369,20 @@ func unmarshalStruct(buf *bytes.Buffer, v reflect.Value) error {
 		}
 		tag := tags(v.Type().Field(i))["tag"]
 		if tag != "" {
+			// Make a pass to create a map of tag values
+			// UInt64-valued fields with values greater than MaxInt64 cannot be selectors.
+			possibleSelectors := make(map[string]int64)
+			for j := 0; j < v.NumField(); j++ {
+				switch v.Field(j).Kind() {
+				case reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+					possibleSelectors[v.Type().Field(j).Name] = v.Field(j).Int()
+				case reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+					val := v.Field(j).Uint()
+					if val <= math.MaxInt64 {
+						possibleSelectors[v.Type().Field(j).Name] = int64(val)
+					}
+				}
+			}
 			// Check that the tagged value was present (and numeric and smaller than MaxInt64)
 			tagValue, ok := possibleSelectors[tag]
 			if !ok {
@@ -470,7 +470,12 @@ func unmarshalUnion(buf *bytes.Buffer, v reflect.Value, selector int64) error {
 			panic(fmt.Sprintf("'%v' union member '%v' did not have a selector tag", v.Type().Name(), v.Type().Field(i).Name))
 		}
 		if sel == selector {
-			return unmarshal(buf, v.Field(i).Elem())
+			val := reflect.New(v.Type().Field(i).Type.Elem())
+			if err := unmarshal(buf, val.Elem()); err != nil {
+				return fmt.Errorf("unmarshalling '%v' union member '%v': %w", v.Type().Name(), v.Type().Field(i).Name, err)
+			}
+			v.Field(i).Set(val)
+			return nil
 		}
 	}
 	panic(fmt.Sprintf("selector value '%v' not handled for type '%v'", selector, v.Type().Name()))
