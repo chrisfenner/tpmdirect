@@ -200,3 +200,14 @@ const (
 	TPMSTAuthSigned         TPMST = 0x8025
 	TPMSTFuManifest         TPMST = 0x8029
 )
+
+// 7.4
+const (
+	TPMRHOwner       TPMHandle = 0x40000001
+	TPMRHNull        TPMHandle = 0x40000007
+	TPMRSPW          TPMHandle = 0x40000009
+	TPMRHLockout     TPMHandle = 0x4000000A
+	TPMRHEndorsement TPMHandle = 0x4000000B
+	TPMRHPlatform    TPMHandle = 0x4000000C
+	TPMRHPlatformNV  TPMHandle = 0x4000000D
+)

@@ -1,7 +1,6 @@
 package tpm2
 
 import (
-	"hash"
 	"io"
 )
 
@@ -16,22 +15,17 @@ type Transport interface {
 
 // Session represents a session in the TPM.
 type Session interface {
-	// Returns the hash algorithm associated with this session.
-	AuthHash() hash.Hash
-	// The length of nonces for this session.
-	NonceSize() int
 	// The last nonceTPM for this session.
 	NonceTPM() []byte
-	// Updates NonceTPM for the session, and generates a new NonceCaller.
-	Update(nonceTPM []byte) error
 	// Computes the authorization HMAC for the session.
 	// If this is the first authorization session for a command, and
 	// there is another session (or sessions) for parameter
 	// encryption and decryption, then decrypt and encrypt are non-nil
 	// and contain nonceTPM from each of those sessions, respectively.
 	Authorize(cc TPMCC, parms, decrypt, encrypt []byte, names []TPM2BName) (*TPMSAuthCommand, error)
-	// Validates the response HMAC for the session.
-	Validate(rc TPMRC, cc TPMCC, parms []byte, auth TPMSAuthResponse) error
+	// Validates the response for the session.
+	// Updates NonceTPM for the session, and generates a new NonceCaller.
+	Validate(rc TPMRC, cc TPMCC, parms []byte, auth *TPMSAuthResponse) error
 	// Returns true if this is an encryption session.
 	IsEncryption() bool
 	// Returns true if this is a decryption session.

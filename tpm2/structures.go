@@ -53,76 +53,74 @@ type TPMAObject struct {
 	// CLEAR (0): The hierarchy of the object may change as a result
 	// of this object or an ancestor key being duplicated for use in
 	// another hierarchy.
-	FixedTPM uint8 `tpmdirect:"bit=1"`
+	FixedTPM bool `tpmdirect:"bit=1"`
 	// SET (1): Previously saved contexts of this object may not be
 	// loaded after Startup(CLEAR).
 	// CLEAR (0): Saved contexts of this object may be used after a
 	// Shutdown(STATE) and subsequent Startup().
-	STClear uint8 `tpmdirect:"bit=2"`
+	STClear bool `tpmdirect:"bit=2"`
 	// shall be zero
 	Reserved2 uint8 `tpmdirect:"bit=3"`
 	// SET (1): The parent of the object may not change.
 	// CLEAR (0): The parent of the object may change as the result of
 	// a TPM2_Duplicate() of the object.
-	FixedParent uint8 `tpmdirect:"bit=4"`
+	FixedParent bool `tpmdirect:"bit=4"`
 	// SET (1): Indicates that, when the object was created with
 	// TPM2_Create() or TPM2_CreatePrimary(), the TPM generated all of
 	// the sensitive data other than the authValue.
 	// CLEAR (0): A portion of the sensitive data, other than the
 	// authValue, was provided by the caller.
-	SensitiveDataOrigin uint8 `tpmdirect:"bit=5"`
+	SensitiveDataOrigin bool `tpmdirect:"bit=5"`
 	// SET (1): Approval of USER role actions with this object may be
 	// with an HMAC session or with a password using the authValue of
 	// the object or a policy session.
 	// CLEAR (0): Approval of USER role actions with this object may
 	// only be done with a policy session.
-	UserWithAuth uint8 `tpmdirect:"bit=6"`
+	UserWithAuth bool `tpmdirect:"bit=6"`
 	// SET (1): Approval of ADMIN role actions with this object may
 	// only be done with a policy session.
 	// CLEAR (0): Approval of ADMIN role actions with this object may
 	// be with an HMAC session or with a password using the authValue
 	// of the object or a policy session.
-	AdminWithPolicy uint8 `tpmdirect:"bit=7"`
+	AdminWithPolicy bool `tpmdirect:"bit=7"`
 	// shall be zero
 	Reserved3 uint8 `tpmdirect:"bit=9:8"`
 	// SET (1): The object is not subject to dictionary attack
 	// protections.
 	// CLEAR (0): The object is subject to dictionary attack
 	// protections.
-	NoDA uint8 `tpmdirect:"bit=10"`
+	NoDA bool `tpmdirect:"bit=10"`
 	// SET (1): If the object is duplicated, then symmetricAlg shall
 	// not be TPM_ALG_NULL and newParentHandle shall not be
 	// TPM_RH_NULL.
 	// CLEAR (0): The object may be duplicated without an inner
 	// wrapper on the private portion of the object and the new parent
 	// may be TPM_RH_NULL.
-	EncryptedDuplication uint8 `tpmdirect:"bit=11"`
+	EncryptedDuplication bool `tpmdirect:"bit=11"`
 	// shall be zero
 	Reserved4 uint8 `tpmdirect:"bit=15:12"`
 	// SET (1): Key usage is restricted to manipulate structures of
 	// known format; the parent of this key shall have restricted SET.
 	// CLEAR (0): Key usage is not restricted to use on special
 	// formats.
-	Restricted uint8 `tpmdirect:"bit=16"`
+	Restricted bool `tpmdirect:"bit=16"`
 	// SET (1): The private portion of the key may be used to decrypt.
 	// CLEAR (0): The private portion of the key may not be used to
 	// decrypt.
-	Decrypt uint8 `tpmdirect:"bit=17"`
+	Decrypt bool `tpmdirect:"bit=17"`
 	// SET (1): For a symmetric cipher object, the private portion of
 	// the key may be used to encrypt. For other objects, the private
 	// portion of the key may be used to sign.
 	// CLEAR (0): The private portion of the key may not be used to
 	// sign or encrypt.
-	SignEncrypt uint8 `tpmdirect:"bit=18"`
+	SignEncrypt bool `tpmdirect:"bit=18"`
 	// SET (1): An asymmetric key that may not be used to sign with
 	// TPM2_Sign() CLEAR (0): A key that may be used with TPM2_Sign()
 	// if sign is SET
 	// NOTE: This attribute only has significance if sign is SET.
-	X509Sign uint8 `tpmdirect:"bit=19"`
+	X509Sign bool `tpmdirect:"bit=19"`
 	// shall be zero
-	Reserved5 uint8 `tpmdirect:"bit=23:20"`
-	// shall be zero
-	Reserved6 uint8 `tpmdirect:"bit=31:24"`
+	Reserved5 uint16 `tpmdirect:"bit=31:20"`
 }
 
 // 8.4
@@ -138,7 +136,7 @@ type TPMASession struct {
 	// This attribute has no meaning for a password authorization and the
 	// TPM will allow any setting of the attribute in the command and SET
 	// the attribute in the response.
-	ContinueSession uint8 `tpmdirect:"bit=0"`
+	ContinueSession bool `tpmdirect:"bit=0"`
 	// SET (1): In a command, this setting indicates that the command
 	// should only be executed if the session is exclusive at the start of
 	// the command. In a response, it indicates that the session is
@@ -147,14 +145,14 @@ type TPMASession struct {
 	// CLEAR (0): In a command, indicates that the session need not be
 	// exclusive at the start of the command. In a response, indicates that
 	// the session is not exclusive.
-	AuditExclusive uint8 `tpmdirect:"bit=1"`
+	AuditExclusive bool `tpmdirect:"bit=1"`
 	// SET (1): In a command, this setting indicates that the audit digest
 	// of the session should be initialized and the exclusive status of the
 	// session SET. This setting is only allowed if the audit attribute is
 	// SET (TPM_RC_ATTRIBUTES).
 	// CLEAR (0): In a command, indicates that the audit digest should not
 	// be initialized. This bit is always CLEAR in a response.
-	AuditReset uint8 `tpmdirect:"bit=2"`
+	AuditReset bool `tpmdirect:"bit=2"`
 	// shall be CLEAR
 	Reserved1 uint8 `tpmdirect:"bit=4:3"`
 	// SET (1): In a command, this setting indicates that the first
@@ -166,7 +164,7 @@ type TPMASession struct {
 	// CLEAR (0): Session not used for encryption.
 	// For a password authorization, this attribute will be CLEAR in both the
 	// command and response.
-	Decrypt uint8 `tpmdirect:"bit=5"`
+	Decrypt bool `tpmdirect:"bit=5"`
 	// SET (1): In a command, this setting indicates that the TPM should use
 	// this session to encrypt the first parameter in the response. In a
 	// response, it indicates that the attribute was set in the command and
@@ -176,23 +174,23 @@ type TPMASession struct {
 	// CLEAR (0): Session not used for encryption.
 	// For a password authorization, this attribute will be CLEAR in both the
 	// command and response.
-	Encrypt uint8 `tpmdirect:"bit=6"`
+	Encrypt bool `tpmdirect:"bit=6"`
 	// SET (1): In a command or response, this setting indicates that the
 	// session is for audit and that auditExclusive and auditReset have
 	// meaning. This session may also be used for authorization, encryption,
 	// or decryption. The encrypted and encrypt fields may be SET or CLEAR.
 	// CLEAR (0): Session is not used for audit.
 	// If SET in the command, then this attribute will be SET in the response.
-	Audit uint8 `tpmdirect:"bit=7"`
+	Audit bool `tpmdirect:"bit=7"`
 }
 
 // 8.5
 type TPMALocality struct {
-	TPMLocZero  uint8 `tpmdirect:"bit=0"`
-	TPMLocOne   uint8 `tpmdirect:"bit=1"`
-	TPMLocTwo   uint8 `tpmdirect:"bit=2"`
-	TPMLocThree uint8 `tpmdirect:"bit=3"`
-	TPMLocFour  uint8 `tpmdirect:"bit=4"`
+	TPMLocZero  bool `tpmdirect:"bit=0"`
+	TPMLocOne   bool `tpmdirect:"bit=1"`
+	TPMLocTwo   bool `tpmdirect:"bit=2"`
+	TPMLocThree bool `tpmdirect:"bit=3"`
+	TPMLocFour  bool `tpmdirect:"bit=4"`
 	// If any of these bits is set, an extended locality is indicated
 	Extended uint8 `tpmdirect:"bit=7:5"`
 }
@@ -271,17 +269,17 @@ type TPMLPCRSelection struct {
 
 // 10.13.2
 type TPMSAuthCommand struct {
-	handle        TPMISHAuthSession
-	nonce         TPM2BData
-	attributes    TPMASession
-	authorization TPM2BData
+	Handle        TPMISHAuthSession
+	Nonce         TPM2BData
+	Attributes    TPMASession
+	Authorization TPM2BData
 }
 
 // 10.13.3
 type TPMSAuthResponse struct {
-	nonce         TPM2BData
-	attributes    TPMASession
-	authorization TPM2BData
+	Nonce         TPM2BData
+	Attributes    TPMASession
+	Authorization TPM2BData
 }
 
 // 11.1.3
