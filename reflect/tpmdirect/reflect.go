@@ -485,7 +485,7 @@ func unmarshalUnion(buf *bytes.Buffer, v reflect.Value, selector int64) error {
 // Some tags are settable (with "="). For these, the value is the RHS.
 // For all others, the value is the empty string.
 func tags(t reflect.StructField) map[string]string {
-	allTags, ok := t.Tag.Lookup("tpm2")
+	allTags, ok := t.Tag.Lookup("tpmdirect")
 	if !ok {
 		return nil
 	}
@@ -509,8 +509,8 @@ func tags(t reflect.StructField) map[string]string {
 	return result
 }
 
-// hasTag looks up to see if the type's tpm2-namespaced tag contains the given value.
-// Returns false if there is no tpm2-namespaced tag on the type.
+// hasTag looks up to see if the type's tpmdirect-namespaced tag contains the given value.
+// Returns false if there is no tpmdirect-namespaced tag on the type.
 func hasTag(t reflect.StructField, tag string) bool {
 	ts := tags(t)
 	_, ok := ts[tag]
@@ -561,7 +561,7 @@ func rangeTag(t reflect.StructField, tag string) (int, int, bool) {
 }
 
 // taggedMembers will return a slice of all the members of the given
-// structure that contain (or don't contain) the given tag in the "tpm2"
+// structure that contain (or don't contain) the given tag in the "tpmdirect"
 // namespace.
 // Panics if v's Kind is not Struct.
 func taggedMembers(v reflect.Value, tag string, invert bool) []reflect.Value {

@@ -30,7 +30,7 @@ type NamedHandle struct {
 // 12.1
 type CreateCommand struct {
 	// handle of parent for new object
-	ParentHandle NamedHandle `tpm2:"handle,auth"`
+	ParentHandle NamedHandle `tpmdirect:"handle,auth"`
 	// the sensitive data
 	InSensitive TPM2BSensitiveCreate
 	// the public template
@@ -64,7 +64,7 @@ func (_ *CreateResponse) Response() TPMCC { return TPMCCCreate }
 // 12.2
 type LoadCommand struct {
 	// handle of parent for new object
-	ParentHandle NamedHandle `tpm2:"handle,auth"`
+	ParentHandle NamedHandle `tpmdirect:"handle,auth"`
 	// the private portion of the object
 	InPrivate TPM2BPrivate
 	// the public portion of the object
@@ -84,7 +84,7 @@ func (_ *LoadResponse) Response() TPMCC { return TPMCCLoad }
 
 // 12.7
 type UnsealCommand struct {
-	ItemHandle NamedHandle `tpm2:"handle,auth"`
+	ItemHandle NamedHandle `tpmdirect:"handle,auth"`
 }
 
 func (_ UnsealCommand) Command() TPMCC { return TPMCCUnseal }
@@ -99,7 +99,7 @@ func (_ *UnsealResponse) Response() TPMCC { return TPMCCUnseal }
 type CreatePrimaryCommand struct {
 	// TPM_RH_ENDORSEMENT, TPM_RH_OWNER, TPM_RH_PLATFORM+{PP},
 	// or TPM_RH_NULL
-	PrimaryHandle NamedHandle `tpm2:"handle,auth"`
+	PrimaryHandle NamedHandle `tpmdirect:"handle,auth"`
 	// the sensitive data
 	InSensitive TPM2BSensitiveCreate
 	// the public template

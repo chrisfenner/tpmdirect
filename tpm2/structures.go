@@ -47,82 +47,82 @@ type TPMHandle uint32
 // 8.3.2
 type TPMAObject struct {
 	// shall be zero
-	Reserved1 uint8 `tpm2:"bit=0"`
+	Reserved1 uint8 `tpmdirect:"bit=0"`
 	// SET (1): The hierarchy of the object, as indicated by its
 	// Qualified Name, may not change.
 	// CLEAR (0): The hierarchy of the object may change as a result
 	// of this object or an ancestor key being duplicated for use in
 	// another hierarchy.
-	FixedTPM uint8 `tpm2:"bit=1"`
+	FixedTPM uint8 `tpmdirect:"bit=1"`
 	// SET (1): Previously saved contexts of this object may not be
 	// loaded after Startup(CLEAR).
 	// CLEAR (0): Saved contexts of this object may be used after a
 	// Shutdown(STATE) and subsequent Startup().
-	STClear uint8 `tpm2:"bit=2"`
+	STClear uint8 `tpmdirect:"bit=2"`
 	// shall be zero
-	Reserved2 uint8 `tpm2:"bit=3"`
+	Reserved2 uint8 `tpmdirect:"bit=3"`
 	// SET (1): The parent of the object may not change.
 	// CLEAR (0): The parent of the object may change as the result of
 	// a TPM2_Duplicate() of the object.
-	FixedParent uint8 `tpm2:"bit=4"`
+	FixedParent uint8 `tpmdirect:"bit=4"`
 	// SET (1): Indicates that, when the object was created with
 	// TPM2_Create() or TPM2_CreatePrimary(), the TPM generated all of
 	// the sensitive data other than the authValue.
 	// CLEAR (0): A portion of the sensitive data, other than the
 	// authValue, was provided by the caller.
-	SensitiveDataOrigin uint8 `tpm2:"bit=5"`
+	SensitiveDataOrigin uint8 `tpmdirect:"bit=5"`
 	// SET (1): Approval of USER role actions with this object may be
 	// with an HMAC session or with a password using the authValue of
 	// the object or a policy session.
 	// CLEAR (0): Approval of USER role actions with this object may
 	// only be done with a policy session.
-	UserWithAuth uint8 `tpm2:"bit=6"`
+	UserWithAuth uint8 `tpmdirect:"bit=6"`
 	// SET (1): Approval of ADMIN role actions with this object may
 	// only be done with a policy session.
 	// CLEAR (0): Approval of ADMIN role actions with this object may
 	// be with an HMAC session or with a password using the authValue
 	// of the object or a policy session.
-	AdminWithPolicy uint8 `tpm2:"bit=7"`
+	AdminWithPolicy uint8 `tpmdirect:"bit=7"`
 	// shall be zero
-	Reserved3 uint8 `tpm2:"bit=9:8"`
+	Reserved3 uint8 `tpmdirect:"bit=9:8"`
 	// SET (1): The object is not subject to dictionary attack
 	// protections.
 	// CLEAR (0): The object is subject to dictionary attack
 	// protections.
-	NoDA uint8 `tpm2:"bit=10"`
+	NoDA uint8 `tpmdirect:"bit=10"`
 	// SET (1): If the object is duplicated, then symmetricAlg shall
 	// not be TPM_ALG_NULL and newParentHandle shall not be
 	// TPM_RH_NULL.
 	// CLEAR (0): The object may be duplicated without an inner
 	// wrapper on the private portion of the object and the new parent
 	// may be TPM_RH_NULL.
-	EncryptedDuplication uint8 `tpm2:"bit=11"`
+	EncryptedDuplication uint8 `tpmdirect:"bit=11"`
 	// shall be zero
-	Reserved4 uint8 `tpm2:"bit=15:12"`
+	Reserved4 uint8 `tpmdirect:"bit=15:12"`
 	// SET (1): Key usage is restricted to manipulate structures of
 	// known format; the parent of this key shall have restricted SET.
 	// CLEAR (0): Key usage is not restricted to use on special
 	// formats.
-	Restricted uint8 `tpm2:"bit=16"`
+	Restricted uint8 `tpmdirect:"bit=16"`
 	// SET (1): The private portion of the key may be used to decrypt.
 	// CLEAR (0): The private portion of the key may not be used to
 	// decrypt.
-	Decrypt uint8 `tpm2:"bit=17"`
+	Decrypt uint8 `tpmdirect:"bit=17"`
 	// SET (1): For a symmetric cipher object, the private portion of
 	// the key may be used to encrypt. For other objects, the private
 	// portion of the key may be used to sign.
 	// CLEAR (0): The private portion of the key may not be used to
 	// sign or encrypt.
-	SignEncrypt uint8 `tpm2:"bit=18"`
+	SignEncrypt uint8 `tpmdirect:"bit=18"`
 	// SET (1): An asymmetric key that may not be used to sign with
 	// TPM2_Sign() CLEAR (0): A key that may be used with TPM2_Sign()
 	// if sign is SET
 	// NOTE: This attribute only has significance if sign is SET.
-	X509Sign uint8 `tpm2:"bit=19"`
+	X509Sign uint8 `tpmdirect:"bit=19"`
 	// shall be zero
-	Reserved5 uint8 `tpm2:"bit=23:20"`
+	Reserved5 uint8 `tpmdirect:"bit=23:20"`
 	// shall be zero
-	Reserved6 uint8 `tpm2:"bit=31:24"`
+	Reserved6 uint8 `tpmdirect:"bit=31:24"`
 }
 
 // 8.4
@@ -138,7 +138,7 @@ type TPMASession struct {
 	// This attribute has no meaning for a password authorization and the
 	// TPM will allow any setting of the attribute in the command and SET
 	// the attribute in the response.
-	ContinueSession uint8 `tpm2:"bit=0"`
+	ContinueSession uint8 `tpmdirect:"bit=0"`
 	// SET (1): In a command, this setting indicates that the command
 	// should only be executed if the session is exclusive at the start of
 	// the command. In a response, it indicates that the session is
@@ -147,16 +147,16 @@ type TPMASession struct {
 	// CLEAR (0): In a command, indicates that the session need not be
 	// exclusive at the start of the command. In a response, indicates that
 	// the session is not exclusive.
-	AuditExclusive uint8 `tpm2:"bit=1"`
+	AuditExclusive uint8 `tpmdirect:"bit=1"`
 	// SET (1): In a command, this setting indicates that the audit digest
 	// of the session should be initialized and the exclusive status of the
 	// session SET. This setting is only allowed if the audit attribute is
 	// SET (TPM_RC_ATTRIBUTES).
 	// CLEAR (0): In a command, indicates that the audit digest should not
 	// be initialized. This bit is always CLEAR in a response.
-	AuditReset uint8 `tpm2:"bit=2"`
+	AuditReset uint8 `tpmdirect:"bit=2"`
 	// shall be CLEAR
-	Reserved1 uint8 `tpm2:"bit=4:3"`
+	Reserved1 uint8 `tpmdirect:"bit=4:3"`
 	// SET (1): In a command, this setting indicates that the first
 	// parameter in the command is symmetrically encrypted using the
 	// parameter encryption scheme described in TPM 2.0 Part 1. The TPM will
@@ -166,7 +166,7 @@ type TPMASession struct {
 	// CLEAR (0): Session not used for encryption.
 	// For a password authorization, this attribute will be CLEAR in both the
 	// command and response.
-	Decrypt uint8 `tpm2:"bit=5"`
+	Decrypt uint8 `tpmdirect:"bit=5"`
 	// SET (1): In a command, this setting indicates that the TPM should use
 	// this session to encrypt the first parameter in the response. In a
 	// response, it indicates that the attribute was set in the command and
@@ -176,25 +176,25 @@ type TPMASession struct {
 	// CLEAR (0): Session not used for encryption.
 	// For a password authorization, this attribute will be CLEAR in both the
 	// command and response.
-	Encrypt uint8 `tpm2:"bit=6"`
+	Encrypt uint8 `tpmdirect:"bit=6"`
 	// SET (1): In a command or response, this setting indicates that the
 	// session is for audit and that auditExclusive and auditReset have
 	// meaning. This session may also be used for authorization, encryption,
 	// or decryption. The encrypted and encrypt fields may be SET or CLEAR.
 	// CLEAR (0): Session is not used for audit.
 	// If SET in the command, then this attribute will be SET in the response.
-	Audit uint8 `tpm2:"bit=7"`
+	Audit uint8 `tpmdirect:"bit=7"`
 }
 
 // 8.5
 type TPMALocality struct {
-	TPMLocZero  uint8 `tpm2:"bit=0"`
-	TPMLocOne   uint8 `tpm2:"bit=1"`
-	TPMLocTwo   uint8 `tpm2:"bit=2"`
-	TPMLocThree uint8 `tpm2:"bit=3"`
-	TPMLocFour  uint8 `tpm2:"bit=4"`
+	TPMLocZero  uint8 `tpmdirect:"bit=0"`
+	TPMLocOne   uint8 `tpmdirect:"bit=1"`
+	TPMLocTwo   uint8 `tpmdirect:"bit=2"`
+	TPMLocThree uint8 `tpmdirect:"bit=3"`
+	TPMLocFour  uint8 `tpmdirect:"bit=4"`
 	// If any of these bits is set, an extended locality is indicated
-	Extended uint8 `tpm2:"bit=7:5"`
+	Extended uint8 `tpmdirect:"bit=7:5"`
 }
 
 // 9.3
@@ -230,13 +230,13 @@ type TPMSEmpty = struct{}
 // 10.4.2
 type TPM2BDigest struct {
 	// size in octets of the buffer field; may be 0
-	Buffer []byte `tpm2:"sized"`
+	Buffer []byte `tpmdirect:"sized"`
 }
 
 // 10.4.3
 type TPM2BData struct {
 	// size in octets of the buffer field; may be 0
-	Buffer []byte `tpm2:"sized"`
+	Buffer []byte `tpmdirect:"sized"`
 }
 
 // 10.4.5
@@ -266,7 +266,7 @@ type TPMTTKCreation struct {
 
 // 10.9.7
 type TPMLPCRSelection struct {
-	PCRSelections []TPMSPCRSelection `tpm2:"list"`
+	PCRSelections []TPMSPCRSelection `tpmdirect:"list"`
 }
 
 // 10.13.2
@@ -288,24 +288,24 @@ type TPMSAuthResponse struct {
 type TPMUSymKeyBits struct {
 	// TODO: The rest of the symmetric algorithms get their own entry
 	// in this union.
-	AES *TPMKeyBits  `tpm2:"selector=0x0006"` // TPM_ALG_AES
-	XOR *TPMIAlgHash `tpm2:"selector=0x000A"` // TPM_ALG_XOR
+	AES *TPMKeyBits  `tpmdirect:"selector=0x0006"` // TPM_ALG_AES
+	XOR *TPMIAlgHash `tpmdirect:"selector=0x000A"` // TPM_ALG_XOR
 }
 
 // 11.1.4
 type TPMUSymMode struct {
 	// TODO: The rest of the symmetric algorithms get their own entry
 	// in this union.
-	AES *TPMIAlgSymMode `tpm2:"selector=0x0006"` // TPM_ALG_AES
-	XOR *struct{}       `tpm2:"selector=0x000A"` // TPM_ALG_XOR
+	AES *TPMIAlgSymMode `tpmdirect:"selector=0x0006"` // TPM_ALG_AES
+	XOR *struct{}       `tpmdirect:"selector=0x000A"` // TPM_ALG_XOR
 }
 
 // 11.1.5
 type TPMUSymDetails struct {
 	// TODO: The rest of the symmetric algorithms get their own entry
 	// in this union.
-	AES *struct{} `tpm2:"selector=0x0006"` // TPM_ALG_AES
-	XOR *struct{} `tpm2:"selector=0x000A"` // TPM_ALG_XOR
+	AES *struct{} `tpmdirect:"selector=0x0006"` // TPM_ALG_AES
+	XOR *struct{} `tpmdirect:"selector=0x000A"` // TPM_ALG_XOR
 }
 
 // 11.1.7
@@ -315,13 +315,13 @@ type TPMTSymDefObject struct {
 	// be a supported block cipher and not TPM_ALG_NULL
 	Algorithm TPMIAlgSymObject
 	// the key size
-	KeyBits TPMUSymKeyBits `tpm2:"tag=Algorithm"`
+	KeyBits TPMUSymKeyBits `tpmdirect:"tag=Algorithm"`
 	// default mode
 	// When used in the parameter area of a parent object, this shall
 	// be TPM_ALG_CFB.
-	Mode TPMUSymMode `tpm2:"tag=Algorithm"`
+	Mode TPMUSymMode `tpmdirect:"tag=Algorithm"`
 	// contains the additional algorithm details, if any
-	Details TPMUSymDetails `tpm2:"tag=Algorithm"`
+	Details TPMUSymDetails `tpmdirect:"tag=Algorithm"`
 }
 
 // 11.1.9
@@ -344,7 +344,7 @@ type TPMSSensitiveCreate struct {
 // 11.1.16
 type TPM2BSensitiveCreate struct {
 	// data to be sealed or a symmetric key value.
-	Sensitive TPMSSensitiveCreate `tpm2:"sized"`
+	Sensitive TPMSSensitiveCreate `tpmdirect:"sized"`
 }
 
 // 11.1.17
@@ -369,14 +369,14 @@ type TPMSSchemeXOR struct {
 
 // 11.1.22
 type TPMUSchemeKeyedHash struct {
-	HMAC *TPMSSchemeHMAC `tpm2:"selector=0x0005"` // TPM_ALG_HMAC
-	XOR  *TPMSSchemeXOR  `tpm2:"selector=0x000A"` // TPM_ALG_XOR
+	HMAC *TPMSSchemeHMAC `tpmdirect:"selector=0x0005"` // TPM_ALG_HMAC
+	XOR  *TPMSSchemeXOR  `tpmdirect:"selector=0x000A"` // TPM_ALG_XOR
 }
 
 // 11.1.23
 type TPMTKeyedHashScheme struct {
 	Scheme  TPMIAlgKeyedHashScheme
-	Details TPMUSchemeKeyedHash `tpm2:"tag=Scheme"`
+	Details TPMUSchemeKeyedHash `tpmdirect:"tag=Scheme"`
 }
 
 // 11.2.1.2
@@ -402,11 +402,11 @@ type TPMSKDFSchemeKDF1SP800108 TPMSSchemeHash
 
 // 11.2.3.2
 type TPMUKDFScheme struct {
-	MGF1         *TPMSKDFSchemeMGF1         `tpm2:"selector=0x0007"` // TPM_ALG_MGF1
-	ECDH         *TPMSKDFSchemeECDH         `tpm2:"selector=0x0019"` // TPM_ALG_ECDH
-	KDF1SP80056A *TPMSKDFSchemeKDF1SP80056A `tpm2:"selector=0x0020"` // TPM_ALG_KDF1_SP800_56A
-	KDF2         *TPMSKDFSchemeKDF2         `tpm2:"selector=0x0021"` // TPM_ALG_KDF2
-	KDF1SP800108 *TPMSKDFSchemeKDF1SP800108 `tpm2:"selector=0x0022"` // TPM_ALG_KDF1_SP800_108
+	MGF1         *TPMSKDFSchemeMGF1         `tpmdirect:"selector=0x0007"` // TPM_ALG_MGF1
+	ECDH         *TPMSKDFSchemeECDH         `tpmdirect:"selector=0x0019"` // TPM_ALG_ECDH
+	KDF1SP80056A *TPMSKDFSchemeKDF1SP80056A `tpmdirect:"selector=0x0020"` // TPM_ALG_KDF1_SP800_56A
+	KDF2         *TPMSKDFSchemeKDF2         `tpmdirect:"selector=0x0021"` // TPM_ALG_KDF2
+	KDF1SP800108 *TPMSKDFSchemeKDF1SP800108 `tpmdirect:"selector=0x0022"` // TPM_ALG_KDF1_SP800_108
 }
 
 // 11.2.3.3
@@ -414,18 +414,18 @@ type TPMTKDFScheme struct {
 	// scheme selector
 	Scheme TPMIAlgKDF
 	// scheme parameters
-	Details TPMUKDFScheme `tpm2:"tag=Scheme"`
+	Details TPMUKDFScheme `tpmdirect:"tag=Scheme"`
 }
 
 // 11.2.3.5
 type TPMUAsymScheme struct {
 	// TODO every asym scheme gets an entry in this union.
-	RSASSA *TPMSSigSchemeRSASSA `tpm2:"selector=0x0014"` // TPM_ALG_RSASSA
-	RSAES  *TPMSEncSchemeRSAES  `tpm2:"selector=0x0015"` // TPM_ALG_RSAES
-	RSAPSS *TPMSSigSchemeRSAPSS `tpm2:"selector=0x0016"` // TPM_ALG_RSAPSS
-	OAEP   *TPMSEncSchemeOAEP   `tpm2:"selector=0x0017"` // TPM_ALG_OAEP
-	ECDSA  *TPMSSigSchemeECDSA  `tpm2:"selector=0x0018"` // TPM_ALG_ECDSA
-	ECDH   *TPMSKeySchemeECDH   `tpm2:"selector=0x0019"` // TPM_ALG_ECDH
+	RSASSA *TPMSSigSchemeRSASSA `tpmdirect:"selector=0x0014"` // TPM_ALG_RSASSA
+	RSAES  *TPMSEncSchemeRSAES  `tpmdirect:"selector=0x0015"` // TPM_ALG_RSAES
+	RSAPSS *TPMSSigSchemeRSAPSS `tpmdirect:"selector=0x0016"` // TPM_ALG_RSAPSS
+	OAEP   *TPMSEncSchemeOAEP   `tpmdirect:"selector=0x0017"` // TPM_ALG_OAEP
+	ECDSA  *TPMSSigSchemeECDSA  `tpmdirect:"selector=0x0018"` // TPM_ALG_ECDSA
+	ECDH   *TPMSKeySchemeECDH   `tpmdirect:"selector=0x0019"` // TPM_ALG_ECDH
 }
 
 // 11.2.4.1
@@ -436,7 +436,7 @@ type TPMTRSAScheme struct {
 	// scheme selector
 	Scheme TPMIAlgRSAScheme
 	// scheme parameters
-	Details TPMUAsymScheme `tpm2:"tag=Scheme"`
+	Details TPMUAsymScheme `tpmdirect:"tag=Scheme"`
 }
 
 // 11.2.4.5
@@ -467,7 +467,7 @@ type TPMTECCScheme struct {
 	// scheme selector
 	Scheme TPMIAlgECCScheme
 	// scheme parameters
-	Details TPMUAsymScheme `tpm2:"tag=Scheme"`
+	Details TPMUAsymScheme `tpmdirect:"tag=Scheme"`
 }
 
 // 12.2.2
@@ -475,10 +475,10 @@ type TPMIAlgPublic = TPMAlgID
 
 // 12.2.3.2
 type TPMUPublicID struct {
-	KeyedHash *TPM2BDigest       `tpm2:"selector=0x0008"` // TPM_ALG_KEYEDHASH
-	Sym       *TPM2BDigest       `tpm2:"selector=0x0025"` // TPM_ALG_SYMCIPHER
-	RSA       *TPM2BPublicKeyRSA `tpm2:"selector=0x0001"` // TPM_ALG_RSA
-	ECC       *TPMSECCPoint      `tpm2:"selector=0x0023"` // TPM_ALG_ECC
+	KeyedHash *TPM2BDigest       `tpmdirect:"selector=0x0008"` // TPM_ALG_KEYEDHASH
+	Sym       *TPM2BDigest       `tpmdirect:"selector=0x0025"` // TPM_ALG_SYMCIPHER
+	RSA       *TPM2BPublicKeyRSA `tpmdirect:"selector=0x0001"` // TPM_ALG_RSA
+	ECC       *TPMSECCPoint      `tpmdirect:"selector=0x0023"` // TPM_ALG_ECC
 }
 
 // 12.2.3.3
@@ -535,13 +535,13 @@ type TPMSECCParms struct {
 // 12.2.3.7
 type TPMUPublicParms struct {
 	// sign | decrypt | neither
-	KeyedHashDetail *TPMSKeyedHashParms `tpm2:"selector=0x0008"` // TPM_ALG_KEYEDHASH
+	KeyedHashDetail *TPMSKeyedHashParms `tpmdirect:"selector=0x0008"` // TPM_ALG_KEYEDHASH
 	// sign | decrypt | neither
-	SymCipherDetail *TPMSSymCipherParms `tpm2:"selector=0x0025"` // TPM_ALG_SYMCIPHER
+	SymCipherDetail *TPMSSymCipherParms `tpmdirect:"selector=0x0025"` // TPM_ALG_SYMCIPHER
 	// decrypt + sign
-	RSADetail *TPMSRSAParms `tpm2:"selector=0x0001"` // TPM_ALG_RSA
+	RSADetail *TPMSRSAParms `tpmdirect:"selector=0x0001"` // TPM_ALG_RSA
 	// decrypt + sign
-	ECCDetail *TPMSECCParms `tpm2:"selector=0x0023"` // TPM_ALG_ECC
+	ECCDetail *TPMSECCParms `tpmdirect:"selector=0x0023"` // TPM_ALG_ECC
 }
 
 // 12.2.4
@@ -557,16 +557,16 @@ type TPMTPublic struct {
 	// The policy is computed using the nameAlg of the object.
 	AuthPolicy TPM2BDigest
 	// the algorithm or structure details
-	Parameters TPMUPublicParms `tpm2:"tag=Type"`
+	Parameters TPMUPublicParms `tpmdirect:"tag=Type"`
 	// the unique identifier of the structure
 	// For an asymmetric key, this would be the public key.
-	Unique TPMUPublicID `tpm2:"tag=Type"`
+	Unique TPMUPublicID `tpmdirect:"tag=Type"`
 }
 
 // 12.2.5
 type TPM2BPublic struct {
 	// the public area
-	PublicArea TPMTPublic `tpm2:"sized"`
+	PublicArea TPMTPublic `tpmdirect:"sized"`
 }
 
 // 12.3.7
@@ -593,5 +593,5 @@ type TPMSCreationData struct {
 
 // 15.2
 type TPM2BCreationData struct {
-	CreationData TPMSCreationData `tpm2:"sized"`
+	CreationData TPMSCreationData `tpmdirect:"sized"`
 }

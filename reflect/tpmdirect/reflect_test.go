@@ -66,7 +66,7 @@ func TestMarshalSlice(t *testing.T) {
 	// Slices in reflect/tpmdirect must be tagged marshalled/unmarshalled as
 	// part of a struct with the 'list' tag
 	type sliceWrapper struct {
-		Elems []uint32 `tpm2:"list"`
+		Elems []uint32 `tpmdirect:"list"`
 	}
 	vals := []struct {
 		Name          string
@@ -87,24 +87,24 @@ func TestMarshalSlice(t *testing.T) {
 
 func TestMarshalBitfield(t *testing.T) {
 	type bitfield8 struct {
-		Bit0 uint8 `tpm2:"bit=0"`
-		Bit1 uint8 `tpm2:"bit=1"`
-		Bit2 uint8 `tpm2:"bit=2"`
-		Bit3 uint8 `tpm2:"bit=3"`
-		Bit4 uint8 `tpm2:"bit=4"`
-		Bit5 uint8 `tpm2:"bit=5"`
-		Bit6 uint8 `tpm2:"bit=6"`
-		Bit7 uint8 `tpm2:"bit=7"`
+		Bit0 uint8 `tpmdirect:"bit=0"`
+		Bit1 uint8 `tpmdirect:"bit=1"`
+		Bit2 uint8 `tpmdirect:"bit=2"`
+		Bit3 uint8 `tpmdirect:"bit=3"`
+		Bit4 uint8 `tpmdirect:"bit=4"`
+		Bit5 uint8 `tpmdirect:"bit=5"`
+		Bit6 uint8 `tpmdirect:"bit=6"`
+		Bit7 uint8 `tpmdirect:"bit=7"`
 	}
 	type bitfield32 struct {
-		Reserved1       uint16 `tpm2:"bit=5:0"`
-		Bit6            uint8  `tpm2:"bit=6"`
-		Reserved2       uint8  `tpm2:"bit=12:7"`
-		Bit13           bool   `tpm2:"bit=13"`
-		Bits14Through18 uint8  `tpm2:"bit=18:14"`
-		Bit19           byte   `tpm2:"bit=19"`
-		Reserved3       uint16 `tpm2:"bit=30:20"`
-		Bit31           uint32 `tpm2:"bit=31"`
+		Reserved1       uint16 `tpmdirect:"bit=5:0"`
+		Bit6            uint8  `tpmdirect:"bit=6"`
+		Reserved2       uint8  `tpmdirect:"bit=12:7"`
+		Bit13           bool   `tpmdirect:"bit=13"`
+		Bits14Through18 uint8  `tpmdirect:"bit=18:14"`
+		Bit19           byte   `tpmdirect:"bit=19"`
+		Reserved3       uint16 `tpmdirect:"bit=30:20"`
+		Bit31           uint32 `tpmdirect:"bit=31"`
 	}
 	t.Run("8bit", func(t *testing.T) {
 		v := bitfield8{
@@ -139,14 +139,14 @@ func TestMarshalUnion(t *testing.T) {
 		Second int32
 	}
 	type unionValue struct {
-		Val8      *uint8     `tpm2:"selector=8"`
-		Val64     *uint64    `tpm2:"selector=0x00000040"`
-		ValStruct *valStruct `tpm2:"selector=5"` // 5 for '5truct'
+		Val8      *uint8     `tpmdirect:"selector=8"`
+		Val64     *uint64    `tpmdirect:"selector=0x00000040"`
+		ValStruct *valStruct `tpmdirect:"selector=5"` // 5 for '5truct'
 	}
 	type unionEnvelope struct {
 		Type       uint8
 		OtherThing uint32
-		Value      unionValue `tpm2:"tag=Type"`
+		Value      unionValue `tpmdirect:"tag=Type"`
 	}
 	eight := uint8(8)
 	sixtyFour := uint64(64)
