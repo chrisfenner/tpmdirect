@@ -117,7 +117,7 @@ func (_ CreatePrimaryCommand) Command() TPMCC { return TPMCCCreatePrimary }
 
 type CreatePrimaryResponse struct {
 	// handle of type TPM_HT_TRANSIENT for created Primary Object
-	ObjectHandle TPMHandle
+	ObjectHandle TPMHandle `tpmdirect:"handle"`
 	// the public portion of the created object
 	OutPublic TPM2BPublic
 	// contains a TPMS_CREATION_DATA

@@ -25,6 +25,8 @@ func TestCreateSRK(t *testing.T) {
 			t.Fatalf("%v", err)
 		}
 		srk = rsp.ObjectHandle
+		t.Logf("SRK handle: %x\n", rsp.ObjectHandle)
+		t.Logf("SRK name: %x\n", rsp.Name)
 	})
 	t.Run("Flush", func(t *testing.T) {
 		cmd := tpm2.FlushContextCommand{

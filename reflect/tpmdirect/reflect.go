@@ -14,9 +14,9 @@ import (
 )
 
 const (
-	// Chosen based on MAX_ALG_LIST_SIZE, the length of the longest reasonable
+	// Chosen based on MAX_DIGEST_BUFFER, the length of the longest reasonable
 	// list returned by the reference implementation.
-	maxListLength uint32 = 64
+	maxListLength uint32 = 1024
 )
 
 // TPM represents a logical connection to a TPM. Support for
@@ -87,15 +87,17 @@ func (t *TPM) Execute(cmd tpm2.Command, rsp tpm2.Response, sess ...tpm2.Session)
 	if err != nil {
 		return err
 	}
-	rspParms, err := rspParametersArea(rspBuf)
+	rspParms, err := rspParametersArea(hasSessions, rspBuf)
 	if err != nil {
 		return err
 	}
-	// We don't need the TPM RC here because we would have errored out from rspHeader
-	// TODO: Authenticate the error code with sessions, if desired.
-	err = rspSessions(rspBuf, tpm2.TPMRCSuccess, cc, rspParms, sess)
-	if err != nil {
-		return err
+	if hasSessions {
+		// We don't need the TPM RC here because we would have errored out from rspHeader
+		// TODO: Authenticate the error code with sessions, if desired.
+		err = rspSessions(rspBuf, tpm2.TPMRCSuccess, cc, rspParms, sess)
+		if err != nil {
+			return err
+		}
 	}
 	err = rspParameters(rspParms, sess, rsp)
 	if err != nil {
@@ -295,9 +297,14 @@ func unmarshal(buf *bytes.Buffer, vs ...reflect.Value) error {
 			return unmarshalNumeric(buf, v)
 		case reflect.Slice:
 			var length uint32
-			err := unmarshalNumeric(buf, reflect.ValueOf(&length).Elem())
-			if err != nil {
-				return fmt.Errorf("deserializing size for field of type '%v': %w", v.Type(), err)
+			// special case for byte slices: just read the entire rest of the buffer
+			if v.Type().Elem().Kind() == reflect.Uint8 {
+				length = uint32(buf.Len())
+			} else {
+				err := unmarshalNumeric(buf, reflect.ValueOf(&length).Elem())
+				if err != nil {
+					return fmt.Errorf("deserializing size for field of type '%v': %w", v.Type(), err)
+				}
 			}
 			if length > uint32(math.MaxInt32) || length > maxListLength {
 				return fmt.Errorf("could not deserialize slice of length %v", length)
@@ -310,11 +317,17 @@ func unmarshal(buf *bytes.Buffer, vs ...reflect.Value) error {
 				return err
 			}
 			v.Set(tmp)
-			return nil
+			continue
 		case reflect.Array:
-			return unmarshalArray(buf, v)
+			if err := unmarshalArray(buf, v); err != nil {
+				return err
+			}
+			continue
 		case reflect.Struct:
-			return unmarshalStruct(buf, v)
+			if err := unmarshalStruct(buf, v); err != nil {
+				return err
+			}
+			continue
 		default:
 			panic(fmt.Sprintf("not unmarshallable: %v", v.Type()))
 		}
@@ -369,8 +382,9 @@ func unmarshalStruct(buf *bytes.Buffer, v reflect.Value) error {
 			panic(fmt.Sprintf("field '%v' of struct '%v' had the 'list' tag but was not a slice",
 				v.Type().Field(i).Name, v.Type().Name()))
 		}
-		if !list && (v.Field(i).Kind() == reflect.Slice) {
-			panic(fmt.Sprintf("field '%v' of struct '%v' was a slice but did not have the 'list' tag",
+		// Slices of anything but byte/uint8 must have the 'list' tag.
+		if !list && (v.Field(i).Kind() == reflect.Slice) && (v.Type().Field(i).Type.Elem().Kind() != reflect.Uint8) {
+			panic(fmt.Sprintf("field '%v' of struct '%v' was a slice of non-byte but did not have the 'list' tag",
 				v.Type().Field(i).Name, v.Type().Name()))
 		}
 		sized := hasTag(v.Type().Field(i), "sized")
@@ -698,7 +712,7 @@ func cmdSessions(sess []tpm2.Session, cc tpm2.TPMCC, names []tpm2.TPM2BName, par
 
 	buf := bytes.NewBuffer(make([]byte, 0, 1024))
 	// Skip space to write the size later
-	buf.Next(4)
+	buf.Write(make([]byte, 4))
 	// Calculate the authorization HMAC for each session
 	for i, s := range sess {
 		auth, err := s.Authorize(cc, parms, encNonceTPM, decNonceTPM, names)
@@ -710,7 +724,7 @@ func cmdSessions(sess []tpm2.Session, cc tpm2.TPMCC, names []tpm2.TPM2BName, par
 
 	result := buf.Bytes()
 	// Write the size
-	binary.BigEndian.PutUint32(result[0:], uint32(buf.Len()))
+	binary.BigEndian.PutUint32(result[0:], uint32(buf.Len()-4))
 
 	return result, nil
 }
@@ -763,10 +777,16 @@ func rspHandles(rsp *bytes.Buffer, rspStruct tpm2.Response) error {
 // from the command. If there is a mismatch between the response's
 // indicated parameters area size and the actual size, returns an error here.
 // rsp is updated to point to the rest of the response after the handles.
-func rspParametersArea(rsp *bytes.Buffer) ([]byte, error) {
+func rspParametersArea(hasSessions bool, rsp *bytes.Buffer) ([]byte, error) {
 	var length uint32
-	if err := binary.Read(rsp, binary.BigEndian, &length); err != nil {
-		return nil, fmt.Errorf("reading length of parameter area: %w", err)
+	if hasSessions {
+		if err := binary.Read(rsp, binary.BigEndian, &length); err != nil {
+			return nil, fmt.Errorf("reading length of parameter area: %w", err)
+		}
+	} else {
+		// If there are no sessions, there is no length-of-parameters field,
+		// because the whole rest of the response is the parameters area.
+		length = uint32(rsp.Len())
 	}
 	if length > uint32(rsp.Len()) {
 		return nil, fmt.Errorf("response indicated %d bytes of parameters but there "+
@@ -807,7 +827,9 @@ func rspSessions(rsp *bytes.Buffer, rc tpm2.TPMRC, cc tpm2.TPMCC, parms []byte, 
 // rspParameters decrypts (if needed) the parameters area of the response
 // into the response structure. If there is a mismatch between the expected
 // and actual response structure, returns an error here.
-func rspParameters(parms []byte, sess []tpm2.Session, rspStruct tpm2.Response) error {
+func rspParameters(parms[]byte, sess []tpm2.Session, rspStruct tpm2.Response) error {
+	parmsFields := taggedMembers(reflect.ValueOf(rspStruct).Elem(), "handle", true)
+
 	// Use the heuristic of "does interpreting the first 2 bytes of response as a length
 	// make any sense" to attempt encrypted paramter decryption.
 	// If the command supports parameter encryption, the first paramter is a 2B
@@ -828,5 +850,5 @@ func rspParameters(parms []byte, sess []tpm2.Session, rspStruct tpm2.Response) e
 			return fmt.Errorf("decrypting first parameter with session %d: %w", i, err)
 		}
 	}
-	return nil
+	return unmarshal(bytes.NewBuffer(parms), parmsFields...)
 }

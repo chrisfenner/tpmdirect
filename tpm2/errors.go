@@ -1,6 +1,8 @@
 package tpm2
 
-import "fmt"
+import (
+	"fmt"
+)
 
 const (
 	TPMRCSuccess TPMRC = 0
