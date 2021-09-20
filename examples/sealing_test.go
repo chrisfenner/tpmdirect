@@ -8,38 +8,6 @@ import (
 	"github.com/chrisfenner/tpmdirect/tpm2"
 )
 
-// Test creating and flushing the SRK.
-func TestCreateSRK(t *testing.T) {
-	tpm, err := tpmdirect.Open(tpm2.LocalSimulator)
-	if err != nil {
-		t.Fatalf("could not connect to TPM simulator: %v", err)
-	}
-	defer tpm.Close()
-	var srk tpm2.TPMHandle
-
-	// Create the SRK
-	createCmd := tpm2.CreatePrimaryCommand{
-		PrimaryHandle: tpm2.NamedPrimaryHandle(tpm2.TPMRHOwner),
-		InPublic:      tpm2.RSASRKTemplate,
-	}
-	var createRsp tpm2.CreatePrimaryResponse
-	if err := tpm.Execute(&createCmd, &createRsp, tpm2.PasswordSession(nil)); err != nil {
-		t.Fatalf("%v", err)
-	}
-	srk = createRsp.ObjectHandle
-	t.Logf("SRK handle: %x\n", createRsp.ObjectHandle)
-	t.Logf("SRK name: %x\n", createRsp.Name)
-
-	// Flush the SRK
-	flushCmd := tpm2.FlushContextCommand{
-		FlushHandle: srk,
-	}
-	var flushRsp tpm2.FlushContextResponse
-	if err := tpm.Execute(&flushCmd, &flushRsp); err != nil {
-		t.Errorf("%v", err)
-	}
-}
-
 // Test creating and unsealing a sealed data blob with a password.
 func TestUnsealWithPassword(t *testing.T) {
 	tpm, err := tpmdirect.Open(tpm2.LocalSimulator)
@@ -57,6 +25,7 @@ func TestUnsealWithPassword(t *testing.T) {
 	if err := tpm.Execute(&createSRKCmd, &createSRKRsp, tpm2.PasswordSession(nil)); err != nil {
 		t.Fatalf("%v", err)
 	}
+	t.Logf("SRK name: %x", createSRKRsp.Name)
 	defer func() {
 		// Flush the SRK
 		flushSRKCmd := tpm2.FlushContextCommand{
@@ -101,9 +70,6 @@ func TestUnsealWithPassword(t *testing.T) {
 						},
 					},
 				},
-				Unique: tpm2.TPMUPublicID{
-					KeyedHash: &tpm2.TPM2BDigest{},
-				},
 			},
 		},
 	}
@@ -147,7 +113,8 @@ func TestUnsealWithPassword(t *testing.T) {
 	if err := tpm.Execute(&unsealCmd, &unsealRsp, tpm2.PasswordSession([]byte("p@ssw0rd"))); err != nil {
 		t.Errorf("%v", err)
 	}
-	if !bytes.Equal(unsealRsp.OutData.Buffer, []byte("secrets")) {
-		t.Errorf("want %x got %x", []byte("secrets"), unsealRsp.OutData.Buffer)
+	want := []byte("secrets")
+	if !bytes.Equal(unsealRsp.OutData.Buffer, want) {
+		t.Errorf("want %x got %x", want, unsealRsp.OutData.Buffer)
 	}
 }

@@ -278,9 +278,11 @@ func marshalUnion(buf *bytes.Buffer, v reflect.Value, selector int64) {
 		}
 		if sel == selector {
 			if v.Field(i).IsNil() {
-				panic(fmt.Sprintf("'%v' union member '%v' selected, but was nil", v.Type().Name(), v.Type().Field(i).Name))
+				// Special case: if the selected value is found but nil, marshal the zero-value instead
+				marshal(buf, reflect.New(v.Field(i).Type().Elem()).Elem())
+			} else {
+				marshal(buf, v.Field(i).Elem())
 			}
-			marshal(buf, v.Field(i).Elem())
 			return
 		}
 	}

@@ -29,9 +29,6 @@ var (
 						Mode: TPMUSymMode{
 							AES: NewTPMAlgID(TPMAlgCFB),
 						},
-						Details: TPMUSymDetails{
-							AES: &struct{}{},
-						},
 					},
 					Scheme: TPMTRSAScheme{
 						Scheme: TPMAlgNull,
