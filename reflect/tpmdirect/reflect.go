@@ -211,6 +211,7 @@ func marshalStruct(buf *bytes.Buffer, v reflect.Value) {
 // The highest bit index is not a multiple of 8, minus 1
 // A field has a range-based selector that is not highest-bit first
 // The bits assigned to a field are more than the size of the field's type
+// Members of a field are anything other than Uint type values
 func marshalBitwise(buf *bytes.Buffer, v reflect.Value) {
 	maxBit := 0
 	for i := 0; i < v.NumField(); i++ {
@@ -232,7 +233,7 @@ func marshalBitwise(buf *bytes.Buffer, v reflect.Value) {
 		marshal(&buf, v.Field(i))
 		b := buf.Bytes()
 		for i := 0; i <= (high - low); i++ {
-			bitArray[low+i] = ((b[i/8] >> (i % 8)) & 1) == 1
+			bitArray[low+i] = ((b[len(b)-i/8-1] >> (i % 8)) & 1) == 1
 		}
 	}
 	result := make([]byte, len(bitArray)/8)
@@ -413,6 +414,7 @@ func unmarshalStruct(buf *bytes.Buffer, v reflect.Value) error {
 // The highest bit index is not a multiple of 8, minus 1
 // A field has a range-based selector that is not highest-bit first
 // The bits assigned to a field are more than the size of the field's type
+// Members of a field are anything other than Uint or bool type values
 func unmarshalBitwise(buf *bytes.Buffer, v reflect.Value) error {
 	maxBit := 0
 	for i := 0; i < v.NumField(); i++ {
@@ -428,7 +430,8 @@ func unmarshalBitwise(buf *bytes.Buffer, v reflect.Value) error {
 		panic(fmt.Sprintf("'%v' bitwise members did not total up to a multiple of 8 bits", v.Type().Name()))
 	}
 	bitArray := make([]bool, maxBit+1)
-	for i := 0; i < len(bitArray); i++ {
+	// We will read big-endian, starting from the last byte and working our way down.
+	for i := len(bitArray)/8 - 1; i >= 0; i-- {
 		b, err := buf.ReadByte()
 		if err != nil {
 			return fmt.Errorf("error %d bits into field '%v' of struct '%v': %w",
@@ -440,16 +443,16 @@ func unmarshalBitwise(buf *bytes.Buffer, v reflect.Value) error {
 	}
 	for i := 0; i < v.NumField(); i++ {
 		high, low, _ := rangeTag(v.Type().Field(i), "bit")
-		tempBytes := make([]byte, (high-low+1)/8)
-		for i := 0; i <= high-low; i++ {
-			if bitArray[low+i] {
-				tempBytes[len(tempBytes)-(i/8)-1] |= (1 << (i % 8))
+		var val uint64
+		for j := 0; j <= high-low; j++ {
+			if bitArray[low+j] {
+				val |= (1 << j)
 			}
 		}
-		tempBuf := bytes.NewBuffer(tempBytes)
-		if err := unmarshal(tempBuf, v.Field(i)); err != nil {
-			return fmt.Errorf("reading field '%v' of struct of type '%v': %w",
-				v.Type().Field(i).Name, v.Type().Name(), err)
+		if v.Field(i).Kind() == reflect.Bool {
+			v.Field(i).SetBool((val & 1) == 1)
+		} else {
+			v.Field(i).SetUint(val)
 		}
 	}
 	return nil
@@ -488,7 +491,7 @@ func tags(t reflect.StructField) map[string]string {
 		// If the split returns an empty slice, this is an empty tag.
 		// If the split returns a slice of length 1, this is an un-settable tag.
 		// If the split returns a slice of length 2, this is a settable tag.
-		assignment := strings.SplitAfterN(tag, "=", 2)
+		assignment := strings.SplitN(tag, "=", 2)
 		val := ""
 		if len(assignment) > 1 {
 			val = assignment[1]

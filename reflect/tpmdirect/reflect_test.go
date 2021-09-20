@@ -9,6 +9,23 @@ import (
 	"github.com/google/go-cmp/cmp"
 )
 
+func marshalUnmarshal(t *testing.T, v interface{}, want []byte) {
+	t.Helper()
+	var buf bytes.Buffer
+	marshal(&buf, reflect.ValueOf(v))
+	if !bytes.Equal(buf.Bytes(), want) {
+		t.Errorf("want %x got %x", want, buf.Bytes())
+	}
+	got := reflect.New(reflect.TypeOf(v))
+	err := unmarshal(&buf, got.Elem())
+	if err != nil {
+		t.Fatalf("want nil, got %v", err)
+	}
+	if !cmp.Equal(v, got.Elem().Interface()) {
+		t.Errorf("want %#v, got %#v\n%v", v, got.Elem().Interface(), cmp.Diff(v, got.Elem().Interface()))
+	}
+}
+
 func TestMarshalNumeric(t *testing.T) {
 	vals := map[interface{}][]byte{
 		false:              []byte{0},
@@ -24,19 +41,7 @@ func TestMarshalNumeric(t *testing.T) {
 	}
 	for v, want := range vals {
 		t.Run(fmt.Sprintf("%v-%v", reflect.TypeOf(v), v), func(t *testing.T) {
-			var buf bytes.Buffer
-			marshal(&buf, reflect.ValueOf(v))
-			if !bytes.Equal(buf.Bytes(), want) {
-				t.Errorf("want %x got %x", want, buf.Bytes())
-			}
-			got := reflect.New(reflect.TypeOf(v))
-			err := unmarshal(&buf, got.Elem())
-			if err != nil {
-				t.Fatalf("want nil, got %v", err)
-			}
-			if !cmp.Equal(v, got.Elem().Interface()) {
-				t.Errorf("want %#v, got %#v\n%v", v, got.Elem().Interface(), cmp.Diff(v, got.Elem().Interface()))
-			}
+			marshalUnmarshal(t, v, want)
 		})
 	}
 }
@@ -52,19 +57,7 @@ func TestMarshalArray(t *testing.T) {
 	for _, val := range vals {
 		v, want := val.Data, val.Serialization
 		t.Run(fmt.Sprintf("%v-%v", reflect.TypeOf(v), v), func(t *testing.T) {
-			var buf bytes.Buffer
-			marshal(&buf, reflect.ValueOf(v))
-			if !bytes.Equal(buf.Bytes(), want) {
-				t.Errorf("want %x got %x", want, buf.Bytes())
-			}
-			got := reflect.New(reflect.TypeOf(v))
-			err := unmarshal(&buf, got.Elem())
-			if err != nil {
-				t.Fatalf("want nil, got %v", err)
-			}
-			if !cmp.Equal(v, got.Elem().Interface()) {
-				t.Errorf("want %#v, got %#v\n%v", v, got.Elem().Interface(), cmp.Diff(v, got.Elem().Interface()))
-			}
+			marshalUnmarshal(t, v, want)
 		})
 	}
 }
@@ -87,19 +80,55 @@ func TestMarshalSlice(t *testing.T) {
 	for _, val := range vals {
 		v, want := val.Data, val.Serialization
 		t.Run(val.Name, func(t *testing.T) {
-			var buf bytes.Buffer
-			marshal(&buf, reflect.ValueOf(v))
-			if !bytes.Equal(buf.Bytes(), want) {
-				t.Errorf("want %x got %x", want, buf.Bytes())
-			}
-			got := reflect.New(reflect.TypeOf(v))
-			err := unmarshal(&buf, got.Elem())
-			if err != nil {
-				t.Fatalf("want nil, got %v", err)
-			}
-			if !cmp.Equal(v, got.Elem().Interface()) {
-				t.Errorf("want %#v, got %#v\n%v", v, got.Elem().Interface(), cmp.Diff(v, got.Elem().Interface()))
-			}
+			marshalUnmarshal(t, v, want)
 		})
 	}
+}
+
+func TestMarshalBitfield(t *testing.T) {
+	type bitfield8 struct {
+		Bit0 uint8 `tpm2:"bit=0"`
+		Bit1 uint8 `tpm2:"bit=1"`
+		Bit2 uint8 `tpm2:"bit=2"`
+		Bit3 uint8 `tpm2:"bit=3"`
+		Bit4 uint8 `tpm2:"bit=4"`
+		Bit5 uint8 `tpm2:"bit=5"`
+		Bit6 uint8 `tpm2:"bit=6"`
+		Bit7 uint8 `tpm2:"bit=7"`
+	}
+	type bitfield32 struct {
+		Reserved1       uint16 `tpm2:"bit=5:0"`
+		Bit6            uint8  `tpm2:"bit=6"`
+		Reserved2       uint8  `tpm2:"bit=12:7"`
+		Bit13           bool   `tpm2:"bit=13"`
+		Bits14Through18 uint8  `tpm2:"bit=18:14"`
+		Bit19           byte   `tpm2:"bit=19"`
+		Reserved3       uint16 `tpm2:"bit=30:20"`
+		Bit31           uint32 `tpm2:"bit=31"`
+	}
+	t.Run("8bit", func(t *testing.T) {
+		v := bitfield8{
+			Bit0: 0,
+			Bit1: 1,
+			Bit2: 0,
+			Bit3: 1,
+			Bit4: 1,
+			Bit5: 0,
+			Bit6: 0,
+			Bit7: 1,
+		}
+		want := []byte{0x9a}
+		marshalUnmarshal(t, v, want)
+	})
+	t.Run("32bit", func(t *testing.T) {
+		v := bitfield32{
+			Bit6:            1,
+			Bit13:           false,
+			Bits14Through18: 29,
+			Bit19:           1,
+			Bit31:           1,
+		}
+		want := []byte{0x80, 0x0f, 0x40, 0x40}
+		marshalUnmarshal(t, v, want)
+	})
 }
