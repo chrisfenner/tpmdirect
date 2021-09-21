@@ -27,7 +27,7 @@ type TPM struct {
 
 // Open opens a TPM connection using the provided transport open function.
 // When this TPM connection is closed, the transport is closed.
-func Open(opener func()(tpm2.Transport, error)) (*TPM, error) {
+func Open(opener func()(tpm2.Transport, error)) (tpm2.Interface, error) {
 	t, err := opener()
 	if err != nil {
 		return nil, err
@@ -62,7 +62,7 @@ func (t *TPM) Execute(cmd tpm2.Command, rsp tpm2.Response, sess ...tpm2.Session)
 	if len(names) > len(sess) {
 		panic(fmt.Sprintf("command requires at least %v sessions, got %v", len(names), len(sess)))
 	}
-	sessions, err := cmdSessions(sess, cc, names, parms)
+	sessions, err := cmdSessions(t, sess, cc, names, parms)
 	if err != nil {
 		return err
 	}
@@ -81,6 +81,16 @@ func (t *TPM) Execute(cmd tpm2.Command, rsp tpm2.Response, sess ...tpm2.Session)
 	rspBuf := bytes.NewBuffer(response)
 	err = rspHeader(rspBuf)
 	if err != nil {
+		var bonusErrs []string
+		// Emergency cleanup, then return.
+		for _, s := range sess {
+			if err := s.CleanupFailure(t); err != nil {
+				bonusErrs = append(bonusErrs, err.Error())
+			}
+		}
+		if len(bonusErrs) != 0 {
+			return fmt.Errorf("%w - additional errors encountered during cleanup: %v", strings.Join(bonusErrs, ", "))
+		}
 		return err
 	}
 	err = rspHandles(rspBuf, rsp)
@@ -616,7 +626,7 @@ func taggedMembers(v reflect.Value, tag string, invert bool) []reflect.Value {
 	for i := 0; i < t.NumField(); i++ {
 		// Add this one to the list if it has the tag and we're not inverting,
 		// or if it doesn't have the tag and we are inverting.
-		if hasTag(t.Field(i), "handle") != invert {
+		if hasTag(t.Field(i), tag) != invert {
 			result = append(result, v.Field(i))
 		}
 	}
@@ -691,10 +701,16 @@ func cmdParameters(cmd tpm2.Command, sess []tpm2.Session) ([]byte, error) {
 }
 
 // cmdSessions returns the authorization area of the command.
-func cmdSessions(sess []tpm2.Session, cc tpm2.TPMCC, names []tpm2.TPM2BName, parms []byte) ([]byte, error) {
+func cmdSessions(tpm *TPM, sess []tpm2.Session, cc tpm2.TPMCC, names []tpm2.TPM2BName, parms []byte) ([]byte, error) {
 	// There is no authorization area if there are no sessions.
 	if len(sess) == 0 {
 		return nil, nil
+	}
+	// Initialize the sessions, if needed
+	for i, s := range sess {
+		if err := s.Init(tpm); err != nil {
+			return nil, fmt.Errorf("initializing session %d: %w", i, err)
+		}
 	}
 	// Find the encryption and decryption session nonceTPMs, if any.
 	var encNonceTPM, decNonceTPM []byte

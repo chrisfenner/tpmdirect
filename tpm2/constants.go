@@ -1,5 +1,13 @@
 package tpm2
 
+import (
+	"fmt"
+	"hash"
+	"crypto/sha1"
+	"crypto/sha256"
+	"crypto/sha512"
+)
+
 // 6.3
 const (
 	TPMAlgRSA          TPMAlgID = 0x0001
@@ -42,6 +50,21 @@ const (
 	TPMAlgCFB          TPMAlgID = 0x0043
 	TPMAlgECB          TPMAlgID = 0x0044
 )
+
+// Enumerate the algorithms in TPMIAlgHash so that we can define functions on them.
+func (a TPMIAlgHash) Hash() hash.Hash {
+	switch TPMAlgID(a) {
+	case TPMAlgSHA1:
+		return sha1.New()
+	case TPMAlgSHA256:
+		return sha256.New()
+	case TPMAlgSHA384:
+		return sha512.New384()
+	case TPMAlgSHA512:
+		return sha512.New()
+	}
+	panic(fmt.Sprintf("unsupported hash algorithm: %v", a))
+}
 
 // 6.4
 const (
@@ -199,6 +222,13 @@ const (
 	TPMSTHashCheck          TPMST = 0x8024
 	TPMSTAuthSigned         TPMST = 0x8025
 	TPMSTFuManifest         TPMST = 0x8029
+)
+
+// 6.11
+const (
+	TPMSEHMAC TPMSE = 0x00
+	TPMSEPolicy TPMSE = 0x01
+	TPMXETrial TPMSE = 0x03
 )
 
 // 7.4

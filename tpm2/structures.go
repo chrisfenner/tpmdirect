@@ -47,6 +47,9 @@ type TPMRC uint32
 // 6.9
 type TPMST uint16
 
+// 6.11
+type TPMSE uint8
+
 // 7.1
 type TPMHandle uint32
 
@@ -160,7 +163,9 @@ type TPMASession struct {
 	// be initialized. This bit is always CLEAR in a response.
 	AuditReset bool `tpmdirect:"bit=2"`
 	// shall be CLEAR
-	Reserved1 uint8 `tpmdirect:"bit=4:3"`
+	Reserved1 bool `tpmdirect:"bit=3"`
+	// shall be CLEAR
+	Reserved2 bool `tpmdirect:"bit=4"`
 	// SET (1): In a command, this setting indicates that the first
 	// parameter in the command is symmetrically encrypted using the
 	// parameter encryption scheme described in TPM 2.0 Part 1. The TPM will
@@ -204,6 +209,9 @@ type TPMALocality struct {
 // 9.3
 type TPMIDHObject = TPMHandle
 
+// 9.6
+type TPMIDHEntity = TPMHandle
+
 // 9.8
 type TPMISHAuthSession = TPMHandle
 
@@ -215,6 +223,11 @@ type TPMIRHHierarchy = TPMHandle
 
 // 9.27
 type TPMIAlgHash = TPMAlgID
+// TODO: Provide a dummy interface here so we can explicitly enumerate them
+// for compile-time protection.
+
+// 9.29
+type TPMIAlgSym = TPMAlgID
 
 // 9.30
 type TPMIAlgSymObject = TPMAlgID
@@ -232,16 +245,16 @@ type TPMISTCommandTag = TPMST
 type TPMSEmpty = struct{}
 
 // 10.4.2
-type TPM2BDigest struct {
-	// size in octets of the buffer field; may be 0
-	Buffer []byte `tpmdirect:"sized"`
-}
+type TPM2BDigest TPM2BData
 
 // 10.4.3
 type TPM2BData struct {
 	// size in octets of the buffer field; may be 0
 	Buffer []byte `tpmdirect:"sized"`
 }
+
+// 10.4.4
+type TPM2BNonce TPM2BDigest
 
 // 10.4.5
 type TPM2BAuth TPM2BDigest
@@ -276,14 +289,14 @@ type TPMLPCRSelection struct {
 // 10.13.2
 type TPMSAuthCommand struct {
 	Handle        TPMISHAuthSession
-	Nonce         TPM2BData
+	Nonce         TPM2BNonce
 	Attributes    TPMASession
 	Authorization TPM2BData
 }
 
 // 10.13.3
 type TPMSAuthResponse struct {
-	Nonce         TPM2BData
+	Nonce         TPM2BNonce
 	Attributes    TPMASession
 	Authorization TPM2BData
 }
@@ -310,6 +323,18 @@ type TPMUSymDetails struct {
 	// in this union.
 	AES *struct{} `tpmdirect:"selector=0x0006"` // TPM_ALG_AES
 	XOR *struct{} `tpmdirect:"selector=0x000A"` // TPM_ALG_XOR
+}
+
+// 11.1.6
+type TPMTSymDef struct {
+	// indicates a symmetric algorithm
+	Algorithm TPMIAlgSym
+	// the key size
+	KeyBits TPMUSymKeyBits `tpmdirect:"tag=Algorithm"`
+	// the mode for the key
+	Mode TPMUSymMode `tpmdirect:"tag=Algorithm"`
+	// contains the additional algorithm details
+	Details TPMUSymDetails `tpmdirect:"tag=Algorithm"`
 }
 
 // 11.1.7
@@ -473,6 +498,9 @@ type TPMTECCScheme struct {
 	// scheme parameters
 	Details TPMUAsymScheme `tpmdirect:"tag=Scheme"`
 }
+
+// 11.433
+type TPM2BEncryptedSecret TPM2BData
 
 // 12.2.2
 type TPMIAlgPublic = TPMAlgID

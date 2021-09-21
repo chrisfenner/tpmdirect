@@ -28,6 +28,41 @@ type NamedHandle struct {
 	Name   []byte `tpmdirect:"skip"`
 }
 
+// 11.1
+type StartAuthSessionCommand struct {
+	// handle of a loaded decrypt key used to encrypt salt
+	// may be TPM_RH_NULL
+	TPMKey TPMIDHObject `tpmdirect:"handle"`
+	// entity providing the authValue
+	// may be TPM_RH_NULL
+	Bind TPMIDHEntity `tpmdirect:"handle"`
+	// initial nonceCaller, sets nonceTPM size for the session
+	// shall be at least 16 octets
+	NonceCaller TPM2BNonce
+	// value encrypted according to the type of tpmKey
+	// If tpmKey is TPM_RH_NULL, this shall be the Empty Buffer.
+	EncryptedSalt TPM2BEncryptedSecret
+	// indicates the type of the session; simple HMAC or policy (including a trial policy)
+	SessionType TPMSE
+	// the algorithm and key size for parameter encryption
+	// may select TPM_ALG_NULL
+	Symmetric TPMTSymDef
+	// hash algorithm to use for the session
+	// Shall be a hash algorithm supported by the TPM and not TPM_ALG_NULL
+	AuthHash TPMIAlgHash
+}
+
+func (_ *StartAuthSessionCommand) Command() TPMCC { return TPMCCStartAuthSession }
+
+type StartAuthSessionResponse struct {
+	// handle for the newly created session
+	SessionHandle TPMISHAuthSession `tpmdirect:"handle"`
+	// the initial nonce from the TPM, used in the computation of the sessionKey
+	NonceTPM TPM2BNonce
+}
+
+func (_ *StartAuthSessionResponse) Response() TPMCC { return TPMCCStartAuthSession }
+
 // 12.1
 type CreateCommand struct {
 	// handle of parent for new object

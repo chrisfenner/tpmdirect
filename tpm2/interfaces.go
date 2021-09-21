@@ -15,6 +15,16 @@ type Transport interface {
 
 // Session represents a session in the TPM.
 type Session interface {
+	// Initializes the session, if needed. Has no effect if not needed or
+	// already done. Some types of sessions may need to be initialized
+	// just-in-time, e.g., to support calling patterns that help the user
+	// securely authorize their actions without writing a lot of code.
+	Init(tpm Interface) error
+	// Cleans up the session, if needed.
+	// Some types of session need to be cleaned up if the command failed,
+	// again to support calling patterns that help the user securely
+	// authorize their actions without writing a lot of code.
+	CleanupFailure(tpm Interface) error
 	// The last nonceTPM for this session.
 	NonceTPM() []byte
 	// Computes the authorization HMAC for the session.
@@ -40,10 +50,11 @@ type Session interface {
 
 // Interface represents a logical connection to a TPM.
 type Interface interface {
+	io.Closer
 	// Dispatch serializes a request struct, sends it to the TPM, and then
 	// deserializes the response struct.
 	// sessions may be 0 to three Session objects. See the TPM
 	// specification for what types of sessions are supported.
 	// An error inside the TPM response stream is parsed at this layer.
-	Dispatch(cmd Command, rsp Response, sess ...Session) error
+	Execute(cmd Command, rsp Response, sess ...Session) error
 }

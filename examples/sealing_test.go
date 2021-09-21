@@ -8,8 +8,8 @@ import (
 	"github.com/chrisfenner/tpmdirect/tpm2"
 )
 
-// Test creating and unsealing a sealed data blob with a password.
-func TestUnsealWithPassword(t *testing.T) {
+// Test creating and unsealing a sealed data blob with a password and HMAC.
+func TestUnseal(t *testing.T) {
 	tpm, err := tpmdirect.Open(tpm2.LocalSimulator)
 	if err != nil {
 		t.Fatalf("could not connect to TPM simulator: %v", err)
@@ -22,7 +22,7 @@ func TestUnsealWithPassword(t *testing.T) {
 		InPublic:      tpm2.RSASRKTemplate,
 	}
 	var createSRKRsp tpm2.CreatePrimaryResponse
-	if err := tpm.Execute(&createSRKCmd, &createSRKRsp, tpm2.PasswordSession(nil)); err != nil {
+	if err := tpm.Execute(&createSRKCmd, &createSRKRsp, tpm2.PasswordAuth(nil)); err != nil {
 		t.Fatalf("%v", err)
 	}
 	t.Logf("SRK name: %x", createSRKRsp.Name)
@@ -38,6 +38,10 @@ func TestUnsealWithPassword(t *testing.T) {
 	}()
 
 	// Create a sealed blob under the SRK
+	data := []byte("secrets")
+	// Include some trailing zeros to exercise the TPM's trimming of them from auth values.
+	auth := []byte("p@ssw0rd\x00\x00")
+	auth2 := []byte("p@ssw0rd")
 	createBlobCmd := tpm2.CreateCommand{
 		ParentHandle: tpm2.NamedHandle{
 			Handle: createSRKRsp.ObjectHandle,
@@ -46,10 +50,10 @@ func TestUnsealWithPassword(t *testing.T) {
 		InSensitive: tpm2.TPM2BSensitiveCreate{
 			Sensitive: tpm2.TPMSSensitiveCreate {
 				UserAuth: tpm2.TPM2BAuth{
-					Buffer: []byte("p@ssw0rd"),
+					Buffer: auth,
 				},
 				Data: tpm2.TPM2BData{
-					Buffer: []byte("secrets"),
+					Buffer: data,
 				},
 			},
 		},
@@ -74,7 +78,7 @@ func TestUnsealWithPassword(t *testing.T) {
 		},
 	}
 	var createBlobRsp tpm2.CreateResponse
-	if err := tpm.Execute(&createBlobCmd, &createBlobRsp, tpm2.PasswordSession(nil)); err != nil {
+	if err := tpm.Execute(&createBlobCmd, &createBlobRsp, tpm2.PasswordAuth(nil)); err != nil {
 		t.Fatalf("%v", err)
 	}
 
@@ -88,7 +92,7 @@ func TestUnsealWithPassword(t *testing.T) {
 		InPublic: createBlobRsp.OutPublic,
 	}
 	var loadBlobRsp tpm2.LoadResponse
-	if err := tpm.Execute(&loadBlobCmd, &loadBlobRsp, tpm2.PasswordSession(nil)); err != nil {
+	if err := tpm.Execute(&loadBlobCmd, &loadBlobRsp, tpm2.PasswordAuth(nil)); err != nil {
 		t.Fatalf("%v", err)
 	}
 	defer func() {
@@ -102,19 +106,37 @@ func TestUnsealWithPassword(t *testing.T) {
 		}
 	}()
 
-	// Unseal the blob
-	unsealCmd := tpm2.UnsealCommand{
-		ItemHandle: tpm2.NamedHandle{
-			Handle: loadBlobRsp.ObjectHandle,
-			Name: loadBlobRsp.Name.Buffer,
-		},
-	}
-	var unsealRsp tpm2.UnsealResponse
-	if err := tpm.Execute(&unsealCmd, &unsealRsp, tpm2.PasswordSession([]byte("p@ssw0rd"))); err != nil {
-		t.Errorf("%v", err)
-	}
-	want := []byte("secrets")
-	if !bytes.Equal(unsealRsp.OutData.Buffer, want) {
-		t.Errorf("want %x got %x", want, unsealRsp.OutData.Buffer)
-	}
+	// Unseal the blob with a password session
+	t.Run("WithPassword", func(t *testing.T) {
+		unsealCmd := tpm2.UnsealCommand{
+			ItemHandle: tpm2.NamedHandle{
+				Handle: loadBlobRsp.ObjectHandle,
+				Name: loadBlobRsp.Name.Buffer,
+			},
+		}
+		var unsealRsp tpm2.UnsealResponse
+		if err := tpm.Execute(&unsealCmd, &unsealRsp, tpm2.PasswordAuth(auth)); err != nil {
+			t.Errorf("%v", err)
+		}
+		if !bytes.Equal(unsealRsp.OutData.Buffer, data) {
+			t.Errorf("want %x got %x", data, unsealRsp.OutData.Buffer)
+		}
+	})
+
+	// Unseal the blob with a use-once HMAC session
+	t.Run("WithHMAC", func(t *testing.T) {
+		unsealCmd := tpm2.UnsealCommand{
+			ItemHandle: tpm2.NamedHandle{
+				Handle: loadBlobRsp.ObjectHandle,
+				Name: loadBlobRsp.Name.Buffer,
+			},
+		}
+		var unsealRsp tpm2.UnsealResponse
+		if err := tpm.Execute(&unsealCmd, &unsealRsp, tpm2.HMACAuth(tpm2.TPMAlgSHA256, 16, auth2)); err != nil {
+			t.Errorf("%v", err)
+		}
+		if !bytes.Equal(unsealRsp.OutData.Buffer, data) {
+			t.Errorf("want %x got %x", data, unsealRsp.OutData.Buffer)
+		}
+	})
 }
