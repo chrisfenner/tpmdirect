@@ -85,8 +85,7 @@ type authOptions struct {
 
 // defaultOptions represents the default options used when none are provided.
 func defaultOptions() authOptions {
-	return authOptions{
-	}
+	return authOptions{}
 }
 
 // AuthOption is an option for setting up an auth session variadically.
@@ -94,11 +93,11 @@ type AuthOption func(*authOptions)
 
 // hmacSession generally implements the HMAC session.
 type hmacSession struct {
-	hash TPMIAlgHash
+	hash      TPMIAlgHash
 	nonceSize int
-	handle TPMHandle
-	auth []byte
-	attrs TPMASession
+	handle    TPMHandle
+	auth      []byte
+	attrs     TPMASession
 	// last nonceCaller
 	nonceCaller TPM2BNonce
 	// last nonceTPM
@@ -110,10 +109,10 @@ type hmacSession struct {
 func HMACAuth(hash TPMIAlgHash, nonceSize int, auth []byte, opts ...AuthOption) Session {
 	// Set up a one-off session that knows the auth value.
 	sess := hmacSession{
-		hash: hash,
+		hash:      hash,
 		nonceSize: nonceSize,
-		handle: TPMRHNull,
-		auth: auth,
+		handle:    TPMRHNull,
+		auth:      auth,
 		attrs: TPMASession{
 			ContinueSession: false,
 		},
@@ -127,13 +126,13 @@ func HMACAuth(hash TPMIAlgHash, nonceSize int, auth []byte, opts ...AuthOption) 
 }
 
 // HMACSession sets up a reusable HMAC session that needs to be closed.
-func HMACSession(tpm Interface, hash TPMIAlgHash, nonceSize int, auth []byte, opts ...AuthOption) (s Session, close func()error, err error) {
+func HMACSession(tpm Interface, hash TPMIAlgHash, nonceSize int, auth []byte, opts ...AuthOption) (s Session, close func() error, err error) {
 	// Set up a not-one-off session that knows the auth value.
 	sess := hmacSession{
-		hash: hash,
+		hash:      hash,
 		nonceSize: nonceSize,
-		handle: TPMRHNull,
-		auth: auth,
+		handle:    TPMRHNull,
+		auth:      auth,
 		attrs: TPMASession{
 			ContinueSession: true,
 		},
@@ -149,7 +148,7 @@ func HMACSession(tpm Interface, hash TPMIAlgHash, nonceSize int, auth []byte, op
 		return nil, nil, err
 	}
 
-	closer := func()error {
+	closer := func() error {
 		flushCmd := FlushContextCommand{
 			FlushHandle: sess.handle,
 		}
@@ -178,8 +177,8 @@ func (s *hmacSession) Init(tpm Interface) error {
 
 	// Start up the actual auth session.
 	sasCmd := StartAuthSessionCommand{
-		TPMKey: TPMRHNull,
-		Bind: TPMRHNull,
+		TPMKey:      TPMRHNull,
+		Bind:        TPMRHNull,
 		NonceCaller: s.nonceCaller,
 		SessionType: TPMSEHMAC,
 		Symmetric: TPMTSymDef{
@@ -220,14 +219,30 @@ func (s *hmacSession) NonceTPM() []byte { return s.nonceTPM.Buffer }
 // To avoid a depenency on tpmdirect by tpm2, implement a tiny serialization by hand for TPMASession here
 func attrsToBytes(attrs TPMASession) []byte {
 	var res byte
-	if attrs.ContinueSession { res |= (1 << 0) }
-	if attrs.AuditExclusive { res |= (1 << 1) }
-	if attrs.AuditReset { res |= (1 << 2) }
-	if attrs.Reserved1 { res |= (1 << 3) }
-	if attrs.Reserved2 { res |= (1 << 4) }
-	if attrs.Decrypt { res |= (1 << 5) }
-	if attrs.Encrypt { res |= (1 << 6) }
-	if attrs.Audit { res |= (1 << 7) }
+	if attrs.ContinueSession {
+		res |= (1 << 0)
+	}
+	if attrs.AuditExclusive {
+		res |= (1 << 1)
+	}
+	if attrs.AuditReset {
+		res |= (1 << 2)
+	}
+	if attrs.Reserved1 {
+		res |= (1 << 3)
+	}
+	if attrs.Reserved2 {
+		res |= (1 << 4)
+	}
+	if attrs.Decrypt {
+		res |= (1 << 5)
+	}
+	if attrs.Encrypt {
+		res |= (1 << 6)
+	}
+	if attrs.Audit {
+		res |= (1 << 7)
+	}
 	return []byte{res}
 }
 
@@ -254,6 +269,18 @@ func computeHMAC(alg TPMIAlgHash, key, parms, nonceNewer, nonceOlder []byte, att
 	return mac.Sum(nil), nil
 }
 
+// Trim trailing zeros from the auth value. Part 1, 19.6.5, Note 2
+// Does not allocate a new underlying byte array.
+func hmacKeyFromAuthValue(auth []byte) []byte {
+	key := auth
+	for i := len(key) - 1; i >= 0; i-- {
+		if key[i] == 0 {
+			key = key[:i]
+		}
+	}
+	return key
+}
+
 // Computes the authorization structure for the session.
 func (s *hmacSession) Authorize(cc TPMCC, parms, decrypt, encrypt []byte, names []TPM2BName) (*TPMSAuthCommand, error) {
 	if s.handle == TPMRHNull {
@@ -271,15 +298,8 @@ func (s *hmacSession) Authorize(cc TPMCC, parms, decrypt, encrypt []byte, names 
 		parmBuf.Write(name.Buffer)
 	}
 	parmBuf.Write(parms)
-	
-	// Trim trailing zeros from the auth value. Part 1, 19.6.5, Note 2
-	key := make([]byte, len(s.auth))
-	copy(key, s.auth)
-	for i := len(key) - 1; i >= 0; i-- {
-		if key[i] == 0 {
-			key = key[:i]
-		}
-	}
+
+	key := hmacKeyFromAuthValue(s.auth)
 	// Compute the authorization HMAC.
 	hmac, err := computeHMAC(s.hash, key, parmBuf.Bytes(), s.nonceCaller.Buffer, s.nonceTPM.Buffer, s.attrs)
 	if err != nil {
@@ -298,7 +318,24 @@ func (s *hmacSession) Authorize(cc TPMCC, parms, decrypt, encrypt []byte, names 
 
 // Validates the response session structure for the session.
 func (s *hmacSession) Validate(rc TPMRC, cc TPMCC, parms []byte, auth *TPMSAuthResponse) error {
-	// TODO
+	// Track the new nonceTPM for the session.
+	s.nonceTPM = auth.Nonce
+	// Calculate the parameter buffer for the HMAC.
+	var parmBuf bytes.Buffer
+	binary.Write(&parmBuf, binary.BigEndian, rc)
+	binary.Write(&parmBuf, binary.BigEndian, cc)
+	parmBuf.Write(parms)
+
+	key := hmacKeyFromAuthValue(s.auth)
+	// Compute the authorization HMAC.
+	mac, err := computeHMAC(s.hash, key, parmBuf.Bytes(), s.nonceTPM.Buffer, s.nonceCaller.Buffer, auth.Attributes)
+	if err != nil {
+		return err
+	}
+	// Compare the HMAC (constant time)
+	if !hmac.Equal(mac, auth.Authorization.Buffer) {
+		return fmt.Errorf("incorrect authorization HMAC")
+	}
 	return nil
 }
 
@@ -319,4 +356,3 @@ func (s *hmacSession) Encrypt(parameter []byte) error { return nil }
 // parameter. Otherwise, does not modify the parameter.
 // tpmdirect doesn't currently support using HMAC sessions for encryption.
 func (s *hmacSession) Decrypt(parameter []byte) error { return nil }
-

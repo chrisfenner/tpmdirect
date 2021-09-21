@@ -45,10 +45,10 @@ func TestUnseal(t *testing.T) {
 	createBlobCmd := tpm2.CreateCommand{
 		ParentHandle: tpm2.NamedHandle{
 			Handle: createSRKRsp.ObjectHandle,
-			Name: createSRKRsp.Name.Buffer,
+			Name:   createSRKRsp.Name.Buffer,
 		},
 		InSensitive: tpm2.TPM2BSensitiveCreate{
-			Sensitive: tpm2.TPMSSensitiveCreate {
+			Sensitive: tpm2.TPMSSensitiveCreate{
 				UserAuth: tpm2.TPM2BAuth{
 					Buffer: auth,
 				},
@@ -59,13 +59,13 @@ func TestUnseal(t *testing.T) {
 		},
 		InPublic: tpm2.TPM2BPublic{
 			PublicArea: tpm2.TPMTPublic{
-				Type: tpm2.TPMAlgKeyedHash,
+				Type:    tpm2.TPMAlgKeyedHash,
 				NameAlg: tpm2.TPMAlgSHA256,
 				ObjectAttributes: tpm2.TPMAObject{
-					FixedTPM: true,
-					FixedParent: true,
+					FixedTPM:     true,
+					FixedParent:  true,
 					UserWithAuth: true,
-					NoDA: true,
+					NoDA:         true,
 				},
 				Parameters: tpm2.TPMUPublicParms{
 					KeyedHashDetail: &tpm2.TPMSKeyedHashParms{
@@ -86,17 +86,17 @@ func TestUnseal(t *testing.T) {
 	loadBlobCmd := tpm2.LoadCommand{
 		ParentHandle: tpm2.NamedHandle{
 			Handle: createSRKRsp.ObjectHandle,
-			Name: createSRKRsp.Name.Buffer,
+			Name:   createSRKRsp.Name.Buffer,
 		},
 		InPrivate: createBlobRsp.OutPrivate,
-		InPublic: createBlobRsp.OutPublic,
+		InPublic:  createBlobRsp.OutPublic,
 	}
 	var loadBlobRsp tpm2.LoadResponse
 	if err := tpm.Execute(&loadBlobCmd, &loadBlobRsp, tpm2.PasswordAuth(nil)); err != nil {
 		t.Fatalf("%v", err)
 	}
 	defer func() {
-		// Flush the blob 
+		// Flush the blob
 		flushBlobCmd := tpm2.FlushContextCommand{
 			FlushHandle: loadBlobRsp.ObjectHandle,
 		}
@@ -111,7 +111,7 @@ func TestUnseal(t *testing.T) {
 		unsealCmd := tpm2.UnsealCommand{
 			ItemHandle: tpm2.NamedHandle{
 				Handle: loadBlobRsp.ObjectHandle,
-				Name: loadBlobRsp.Name.Buffer,
+				Name:   loadBlobRsp.Name.Buffer,
 			},
 		}
 		var unsealRsp tpm2.UnsealResponse
@@ -128,7 +128,7 @@ func TestUnseal(t *testing.T) {
 		unsealCmd := tpm2.UnsealCommand{
 			ItemHandle: tpm2.NamedHandle{
 				Handle: loadBlobRsp.ObjectHandle,
-				Name: loadBlobRsp.Name.Buffer,
+				Name:   loadBlobRsp.Name.Buffer,
 			},
 		}
 		var unsealRsp tpm2.UnsealResponse
@@ -137,6 +137,32 @@ func TestUnseal(t *testing.T) {
 		}
 		if !bytes.Equal(unsealRsp.OutData.Buffer, data) {
 			t.Errorf("want %x got %x", data, unsealRsp.OutData.Buffer)
+		}
+	})
+
+	// Unseal the blob with a standalone HMAC session, re-using the session.
+	t.Run("WithHMACSession", func(t *testing.T) {
+		sess, cleanup, err := tpm2.HMACSession(tpm, tpm2.TPMAlgSHA256, 16, auth2)
+		if err != nil {
+			t.Fatalf("%v", err)
+		}
+		defer cleanup()
+
+		unsealCmd := tpm2.UnsealCommand{
+			ItemHandle: tpm2.NamedHandle{
+				Handle: loadBlobRsp.ObjectHandle,
+				Name:   loadBlobRsp.Name.Buffer,
+			},
+		}
+		var unsealRsp tpm2.UnsealResponse
+		// It should be possible to use the session multiple times.
+		for i := 0; i < 3; i++ {
+			if err := tpm.Execute(&unsealCmd, &unsealRsp, sess); err != nil {
+				t.Errorf("%v", err)
+			}
+			if !bytes.Equal(unsealRsp.OutData.Buffer, data) {
+				t.Errorf("want %x got %x", data, unsealRsp.OutData.Buffer)
+			}
 		}
 	})
 }
