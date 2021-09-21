@@ -1,11 +1,11 @@
 package tpm2
 
 import (
-	"fmt"
-	"hash"
 	"crypto/sha1"
 	"crypto/sha256"
 	"crypto/sha512"
+	"fmt"
+	"hash"
 )
 
 // 6.3
@@ -141,7 +141,7 @@ const (
 	TPMCCQuote                      TPMCC = 0x00000158
 	TPMCCRSADecrypt                 TPMCC = 0x00000159
 	TPMCCHMACStart                  TPMCC = 0x0000015B
-	TPMCCMACStart                         = TPMCCHMACStart
+	TPMCCMACStart                   TPMCC = TPMCCHMACStart
 	TPMCCSequenceUpdate             TPMCC = 0x0000015C
 	TPMCCSign                       TPMCC = 0x0000015D
 	TPMCCUnseal                     TPMCC = 0x0000015E
@@ -202,6 +202,114 @@ const (
 	TPMCCACTSetTimeout              TPMCC = 0x00000198
 )
 
+// 6.6.3
+const (
+	TPMRCSuccess TPMRC = 0x00000000
+	rcVer1       TPMRC = 0x00000100
+	// FMT0 error codes
+	TPMRCInitialize      TPMRC = rcVer1 + 0x000
+	TPMRCFailure         TPMRC = rcVer1 + 0x001
+	TPMRCSequence        TPMRC = rcVer1 + 0x003
+	TPMRCPrivate         TPMRC = rcVer1 + 0x00B
+	TPMRCHMAC            TPMRC = rcVer1 + 0x019
+	TPMRCDisabled        TPMRC = rcVer1 + 0x020
+	TPMRCExclusive       TPMRC = rcVer1 + 0x021
+	TPMRCAuthType        TPMRC = rcVer1 + 0x024
+	TPMRCAuthMissing     TPMRC = rcVer1 + 0x025
+	TPMRCPolicy          TPMRC = rcVer1 + 0x026
+	TPMRCPCR             TPMRC = rcVer1 + 0x027
+	TPMRCPCRChanged      TPMRC = rcVer1 + 0x028
+	TPMRCUpgrade         TPMRC = rcVer1 + 0x02D
+	TPMRCTooManyContexts TPMRC = rcVer1 + 0x02E
+	TPMRCAuthUnavailable TPMRC = rcVer1 + 0x02F
+	TPMRCReboot          TPMRC = rcVer1 + 0x030
+	TPMRCUnbalanced      TPMRC = rcVer1 + 0x031
+	TPMRCCommandSize     TPMRC = rcVer1 + 0x042
+	TPMRCCommandCode     TPMRC = rcVer1 + 0x043
+	TPMRCAuthSize        TPMRC = rcVer1 + 0x044
+	TPMRCAuthContext     TPMRC = rcVer1 + 0x045
+	TPMRCNVRange         TPMRC = rcVer1 + 0x046
+	TPMRCNVSize          TPMRC = rcVer1 + 0x047
+	TPMRCNVLocked        TPMRC = rcVer1 + 0x048
+	TPMRCNVAuthorization TPMRC = rcVer1 + 0x049
+	TPMRCNVUninitialized TPMRC = rcVer1 + 0x04A
+	TPMRCNVSpace         TPMRC = rcVer1 + 0x04B
+	TPMRCNVDefined       TPMRC = rcVer1 + 0x04C
+	TPMRCBadContext      TPMRC = rcVer1 + 0x050
+	TPMRCCPHash          TPMRC = rcVer1 + 0x051
+	TPMRCParent          TPMRC = rcVer1 + 0x052
+	TPMRCNeedsTest       TPMRC = rcVer1 + 0x053
+	TPMRCNoResult        TPMRC = rcVer1 + 0x054
+	TPMRCSensitive       TPMRC = rcVer1 + 0x055
+	rcFmt1               TPMRC = 0x00000080
+	// FMT1 error codes
+	TPMRCAsymmetric   TPMRC = rcFmt1 + 0x001
+	TPMRCAttributes   TPMRC = rcFmt1 + 0x002
+	TPMRCHash         TPMRC = rcFmt1 + 0x003
+	TPMRCValue        TPMRC = rcFmt1 + 0x004
+	TPMRCHierarchy    TPMRC = rcFmt1 + 0x005
+	TPMRCKeySize      TPMRC = rcFmt1 + 0x007
+	TPMRCMGF          TPMRC = rcFmt1 + 0x008
+	TPMRCMode         TPMRC = rcFmt1 + 0x009
+	TPMRCType         TPMRC = rcFmt1 + 0x00A
+	TPMRCHandle       TPMRC = rcFmt1 + 0x00B
+	TPMRCKDF          TPMRC = rcFmt1 + 0x00C
+	TPMRCRange        TPMRC = rcFmt1 + 0x00D
+	TPMRCAuthFail     TPMRC = rcFmt1 + 0x00E
+	TPMRCNonce        TPMRC = rcFmt1 + 0x00F
+	TPMRCPP           TPMRC = rcFmt1 + 0x010
+	TPMRCScheme       TPMRC = rcFmt1 + 0x012
+	TPMRCSize         TPMRC = rcFmt1 + 0x015
+	TPMRCSymmetric    TPMRC = rcFmt1 + 0x016
+	TPMRCTag          TPMRC = rcFmt1 + 0x017
+	TPMRCSelector     TPMRC = rcFmt1 + 0x018
+	TPMRCInsufficient TPMRC = rcFmt1 + 0x01A
+	TPMRCSignature    TPMRC = rcFmt1 + 0x01B
+	TPMRCKey          TPMRC = rcFmt1 + 0x01C
+	TPMRCPolicyFail   TPMRC = rcFmt1 + 0x01D
+	TPMRCIntegrity    TPMRC = rcFmt1 + 0x01F
+	TPMRCTicket       TPMRC = rcFmt1 + 0x020
+	TPMRCReservedBits TPMRC = rcFmt1 + 0x021
+	TPMRCBadAuth      TPMRC = rcFmt1 + 0x022
+	TPMRCExpired      TPMRC = rcFmt1 + 0x023
+	TPMRCPolicyCC     TPMRC = rcFmt1 + 0x024
+	TPMRCBinding      TPMRC = rcFmt1 + 0x025
+	TPMRCCurve        TPMRC = rcFmt1 + 0x026
+	TPMRCECCPoint     TPMRC = rcFmt1 + 0x027
+	// Warnings
+	rcWarn              TPMRC = 0x00000900
+	TPMRCContextGap     TPMRC = rcWarn + 0x001
+	TPMRCObjectMemory   TPMRC = rcWarn + 0x002
+	TPMRCSessionMemory  TPMRC = rcWarn + 0x003
+	TPMRCMemory         TPMRC = rcWarn + 0x004
+	TPMRCSessionHandles TPMRC = rcWarn + 0x005
+	TPMRCObjectHandles  TPMRC = rcWarn + 0x006
+	TPMRCLocality       TPMRC = rcWarn + 0x007
+	TPMRCYielded        TPMRC = rcWarn + 0x008
+	TPMRCCanceled       TPMRC = rcWarn + 0x009
+	TPMRCTesting        TPMRC = rcWarn + 0x00A
+	TPMRCReferenceH0    TPMRC = rcWarn + 0x010
+	TPMRCReferenceH1    TPMRC = rcWarn + 0x011
+	TPMRCReferenceH2    TPMRC = rcWarn + 0x012
+	TPMRCReferenceH3    TPMRC = rcWarn + 0x013
+	TPMRCReferenceH4    TPMRC = rcWarn + 0x014
+	TPMRCReferenceH5    TPMRC = rcWarn + 0x015
+	TPMRCReferenceH6    TPMRC = rcWarn + 0x016
+	TPMRCReferenceS0    TPMRC = rcWarn + 0x018
+	TPMRCReferenceS1    TPMRC = rcWarn + 0x019
+	TPMRCReferenceS2    TPMRC = rcWarn + 0x01A
+	TPMRCReferenceS3    TPMRC = rcWarn + 0x01B
+	TPMRCReferenceS4    TPMRC = rcWarn + 0x01C
+	TPMRCReferenceS5    TPMRC = rcWarn + 0x01D
+	TPMRCReferenceS6    TPMRC = rcWarn + 0x01E
+	TPMRCNVRate         TPMRC = rcWarn + 0x020
+	TPMRCLockout        TPMRC = rcWarn + 0x021
+	TPMRCRetry          TPMRC = rcWarn + 0x022
+	TPMRCNVUnavailable  TPMRC = rcWarn + 0x023
+	rcP                 TPMRC = 0x00000040
+	rcS                 TPMRC = 0x00000800
+)
+
 // 6.9
 const (
 	TPMSTRspCommand         TPMST = 0x00C4
@@ -226,9 +334,9 @@ const (
 
 // 6.11
 const (
-	TPMSEHMAC TPMSE = 0x00
+	TPMSEHMAC   TPMSE = 0x00
 	TPMSEPolicy TPMSE = 0x01
-	TPMXETrial TPMSE = 0x03
+	TPMXETrial  TPMSE = 0x03
 )
 
 // 7.4

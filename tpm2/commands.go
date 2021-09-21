@@ -25,7 +25,7 @@ type Response interface {
 type NamedHandle struct {
 	Handle TPMHandle
 	// Convenience value for auth calculation. Not serialized.
-	Name   []byte `tpmdirect:"skip"`
+	Name []byte `tpmdirect:"skip"`
 }
 
 // 11.1

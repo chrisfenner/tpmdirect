@@ -27,7 +27,7 @@ type TPM struct {
 
 // Open opens a TPM connection using the provided transport open function.
 // When this TPM connection is closed, the transport is closed.
-func Open(opener func()(tpm2.Transport, error)) (tpm2.Interface, error) {
+func Open(opener func() (tpm2.Transport, error)) (tpm2.Interface, error) {
 	t, err := opener()
 	if err != nil {
 		return nil, err
@@ -66,7 +66,7 @@ func (t *TPM) Execute(cmd tpm2.Command, rsp tpm2.Response, sess ...tpm2.Session)
 	if err != nil {
 		return err
 	}
-	hdr := cmdHeader(hasSessions, 10 /* size of command header */ + len(handles)+len(sessions)+len(parms), cc)
+	hdr := cmdHeader(hasSessions, 10 /* size of command header */ +len(handles)+len(sessions)+len(parms), cc)
 	command := append(hdr, handles...)
 	command = append(command, sessions...)
 	command = append(command, parms...)
@@ -848,7 +848,7 @@ func rspSessions(rsp *bytes.Buffer, rc tpm2.TPMRC, cc tpm2.TPMCC, parms []byte, 
 // rspParameters decrypts (if needed) the parameters area of the response
 // into the response structure. If there is a mismatch between the expected
 // and actual response structure, returns an error here.
-func rspParameters(parms[]byte, sess []tpm2.Session, rspStruct tpm2.Response) error {
+func rspParameters(parms []byte, sess []tpm2.Session, rspStruct tpm2.Response) error {
 	parmsFields := taggedMembers(reflect.ValueOf(rspStruct).Elem(), "handle", true)
 
 	// Use the heuristic of "does interpreting the first 2 bytes of response as a length

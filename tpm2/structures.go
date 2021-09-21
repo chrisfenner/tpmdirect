@@ -223,6 +223,7 @@ type TPMIRHHierarchy = TPMHandle
 
 // 9.27
 type TPMIAlgHash = TPMAlgID
+
 // TODO: Provide a dummy interface here so we can explicitly enumerate them
 // for compile-time protection.
 

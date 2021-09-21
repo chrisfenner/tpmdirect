@@ -123,6 +123,28 @@ func TestUnseal(t *testing.T) {
 		}
 	})
 
+	// Unseal the blob with an incorrect password session
+	t.Run("WithWrongPassword", func(t *testing.T) {
+		unsealCmd := tpm2.UnsealCommand{
+			ItemHandle: tpm2.NamedHandle{
+				Handle: loadBlobRsp.ObjectHandle,
+				Name:   loadBlobRsp.Name.Buffer,
+			},
+		}
+		var unsealRsp tpm2.UnsealResponse
+		if err := tpm.Execute(&unsealCmd, &unsealRsp, tpm2.PasswordAuth([]byte("NotThePassword"))); err == nil {
+			t.Errorf("want TPM_RC_BAD_AUTH, got nil")
+		} else if rc, ok := err.(tpm2.TPMRC); !ok {
+			t.Errorf("want TPM_RC_BAD_AUTH, got %v", err)
+		} else if fmt1, details := rc.IsFmt1Error(); !fmt1 {
+			t.Errorf("want TPM_RC_BAD_AUTH, got %v", err)
+		} else if details.CanonicalCode != tpm2.TPMRCBadAuth {
+			t.Errorf("want TPM_RC_BAD_AUTH, got %v", err)
+		} else if details.Subject != tpm2.SessionError || details.Index != 1 {
+			t.Errorf("want TPM_RC_BAD_AUTH about session 1, got %v %d", details.Subject, details.Index)
+		}
+	})
+
 	// Unseal the blob with a use-once HMAC session
 	t.Run("WithHMAC", func(t *testing.T) {
 		unsealCmd := tpm2.UnsealCommand{
