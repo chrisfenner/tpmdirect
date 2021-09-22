@@ -468,19 +468,19 @@ func (r TPMRC) IsWarning() bool {
 
 // Error produces a nice human-readable representation of the error, parsing TPM FMT1 errors as needed.
 func (r TPMRC) Error() string {
-	if r.IsFmt0Error() {
-		desc, ok := fmt0Descs[r]
-		if !ok {
-			return fmt.Sprintf("unknown format-0 error code (%x)", uint32(r))
-		}
-		return fmt.Sprintf("%s: %s", desc.name, desc.description)
-	}
 	if isFmt1, details := r.IsFmt1Error(); isFmt1 {
 		desc, ok := fmt1Descs[details.CanonicalCode]
 		if !ok {
 			return fmt.Sprintf("unknown format-1 error: %s (%x)", details, uint32(details.CanonicalCode))
 		}
 		return fmt.Sprintf("%s (%v %d): %s", desc.name, details.Subject, details.Index, desc.description)
+	}
+	if r.IsFmt0Error() {
+		desc, ok := fmt0Descs[r]
+		if !ok {
+			return fmt.Sprintf("unknown format-0 error code (%x)", uint32(r))
+		}
+		return fmt.Sprintf("%s: %s", desc.name, desc.description)
 	}
 	if r.IsWarning() {
 		desc, ok := warnDescs[r]

@@ -53,6 +53,15 @@ func (t *TPM) Execute(cmd tpm2.Command, rsp tpm2.Response, sess ...tpm2.Session)
 	if len(sess) > 3 {
 		panic(fmt.Sprintf("too many sessions: %v", len(sess)))
 	}
+	// Initialize the sessions, if needed
+	for i, s := range sess {
+		if err := s.Init(t); err != nil {
+			return fmt.Errorf("initializing session %d: %w", i, err)
+		}
+		if err := s.NewNonceCaller(); err != nil {
+			return err
+		}
+	}
 	handles := cmdHandles(cmd)
 	parms, err := cmdParameters(cmd, sess)
 	if err != nil {
@@ -684,7 +693,10 @@ func cmdParameters(cmd tpm2.Command, sess []tpm2.Session) ([]byte, error) {
 				// Only one session may be used for decryption.
 				return nil, fmt.Errorf("too many decrypt sessions")
 			}
-			err := s.Encrypt(firstParmBytes)
+			if len(firstParmBytes) < 2 {
+				return nil, fmt.Errorf("this command's first parameter is not a TPM2B")
+			}
+			err := s.Encrypt(firstParmBytes[2:])
 			if err != nil {
 				return nil, fmt.Errorf("encrypting with session %d: %w", i, err)
 			}
@@ -696,7 +708,6 @@ func cmdParameters(cmd tpm2.Command, sess []tpm2.Session) ([]byte, error) {
 	result.Write(firstParmBytes)
 	// Write the rest of the parameters normally.
 	marshal(&result, parms[1:]...)
-
 	return result.Bytes(), nil
 }
 
@@ -705,12 +716,6 @@ func cmdSessions(tpm *TPM, sess []tpm2.Session, cc tpm2.TPMCC, names []tpm2.TPM2
 	// There is no authorization area if there are no sessions.
 	if len(sess) == 0 {
 		return nil, nil
-	}
-	// Initialize the sessions, if needed
-	for i, s := range sess {
-		if err := s.Init(tpm); err != nil {
-			return nil, fmt.Errorf("initializing session %d: %w", i, err)
-		}
 	}
 	// Find the encryption and decryption session nonceTPMs, if any.
 	var encNonceTPM, decNonceTPM []byte

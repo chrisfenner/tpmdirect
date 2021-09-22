@@ -27,6 +27,8 @@ type Session interface {
 	CleanupFailure(tpm Interface) error
 	// The last nonceTPM for this session.
 	NonceTPM() []byte
+	// Updates nonceCaller to a new random value.
+	NewNonceCaller() error
 	// Computes the authorization HMAC for the session.
 	// If this is the first authorization session for a command, and
 	// there is another session (or sessions) for parameter

@@ -2,6 +2,8 @@ package tpm2
 
 import (
 	"bytes"
+	"crypto/aes"
+	"crypto/cipher"
 	"crypto/hmac"
 	"crypto/rand"
 	"encoding/binary"
@@ -30,6 +32,10 @@ func (s *pwSession) CleanupFailure(tpm Interface) error { return nil }
 // Since a password session is a pseudo-session with the auth value stuffed
 // in where the HMAC should go, this is not used.
 func (s *pwSession) NonceTPM() []byte { return nil }
+
+// NewNonceCaller updates the nonceCaller for this session.
+// Password sessions don't have nonces.
+func (s *pwSession) NewNonceCaller() error { return nil }
 
 // Computes the authorization structure for the session.
 func (s *pwSession) Authorize(cc TPMCC, parms, decrypt, encrypt []byte, names []TPM2BName) (*TPMSAuthCommand, error) {
@@ -80,16 +86,56 @@ func (s *pwSession) Decrypt(parameter []byte) error { return nil }
 
 // authOptions represents extra options used when setting up a session.
 type authOptions struct {
-	// TODO: decrypt, encrypt, audit, salted, bound
+	encryption bool
+	decryption bool
+	symmetric TPMTSymDef
 }
 
 // defaultOptions represents the default options used when none are provided.
 func defaultOptions() authOptions {
-	return authOptions{}
+	return authOptions{
+		symmetric: TPMTSymDef{
+			Algorithm: TPMAlgNull,
+		},
+	}
 }
 
 // AuthOption is an option for setting up an auth session variadically.
 type AuthOption func(*authOptions)
+
+// AES encryption uses the session to encrypt the first parameter returned from the TPM.
+// Multiple AESEncrypt/AESDecrypt calls will take the key size of the last one provided.
+func AESEncrypt(keySize TPMKeyBits) AuthOption {
+	return func(o *authOptions) {
+		o.encryption = true
+		o.symmetric = TPMTSymDef{
+			Algorithm: TPMAlgAES,
+			KeyBits: TPMUSymKeyBits{
+				AES: NewTPMKeyBits(keySize),
+			},
+			Mode: TPMUSymMode{
+				AES: NewTPMAlgID(TPMAlgCFB),
+			},
+		}
+	}
+}
+
+// AES encryption uses the session to encrypt the first parameter provided to the TPM.
+// Multiple AESEncrypt/AESDecrypt calls will take the key size of the last one provided.
+func AESDecrypt(keySize TPMKeyBits) AuthOption {
+	return func(o *authOptions) {
+		o.decryption = true
+		o.symmetric = TPMTSymDef{
+			Algorithm: TPMAlgAES,
+			KeyBits: TPMUSymKeyBits{
+				AES: NewTPMKeyBits(keySize),
+			},
+			Mode: TPMUSymMode{
+				AES: NewTPMAlgID(TPMAlgCFB),
+			},
+		}
+	}
+}
 
 // hmacSession generally implements the HMAC session.
 type hmacSession struct {
@@ -102,6 +148,7 @@ type hmacSession struct {
 	nonceCaller TPM2BNonce
 	// last nonceTPM
 	nonceTPM TPM2BNonce
+	symmetric TPMTSymDef
 }
 
 // HMACAuth sets up a just-in-time HMAC session that is used only once.
@@ -122,6 +169,9 @@ func HMACAuth(hash TPMIAlgHash, nonceSize int, auth []byte, opts ...AuthOption) 
 	for _, opt := range opts {
 		opt(&o)
 	}
+	sess.symmetric = o.symmetric
+	sess.attrs.Encrypt = o.encryption
+	sess.attrs.Decrypt = o.decryption
 	return &sess
 }
 
@@ -142,6 +192,9 @@ func HMACSession(tpm Interface, hash TPMIAlgHash, nonceSize int, auth []byte, op
 	for _, opt := range opts {
 		opt(&o)
 	}
+	sess.symmetric = o.symmetric
+	sess.attrs.Encrypt = o.encryption
+	sess.attrs.Decrypt = o.decryption
 
 	// Initialize the session.
 	if err := sess.Init(tpm); err != nil {
@@ -181,9 +234,7 @@ func (s *hmacSession) Init(tpm Interface) error {
 		Bind:        TPMRHNull,
 		NonceCaller: s.nonceCaller,
 		SessionType: TPMSEHMAC,
-		Symmetric: TPMTSymDef{
-			Algorithm: TPMAlgNull,
-		},
+		Symmetric: s.symmetric,
 		AuthHash: s.hash,
 	}
 	var sasRsp StartAuthSessionResponse
@@ -281,16 +332,20 @@ func hmacKeyFromAuthValue(auth []byte) []byte {
 	return key
 }
 
+// NewNonceCaller updates the nonceCaller for this session.
+func (s *hmacSession) NewNonceCaller() error {
+	_, err := rand.Read(s.nonceCaller.Buffer)
+	return err
+}
+
 // Computes the authorization structure for the session.
+// Updates nonceCaller to be a new random nonce.
 func (s *hmacSession) Authorize(cc TPMCC, parms, decrypt, encrypt []byte, names []TPM2BName) (*TPMSAuthCommand, error) {
 	if s.handle == TPMRHNull {
 		// Session is not initialized.
 		return nil, fmt.Errorf("session not initialized")
 	}
 	// Generate a new nonceCaller for the command.
-	if _, err := rand.Read(s.nonceCaller.Buffer); err != nil {
-		return nil, err
-	}
 	// Calculate the parameter buffer for the HMAC.
 	var parmBuf bytes.Buffer
 	binary.Write(&parmBuf, binary.BigEndian, cc)
@@ -317,6 +372,7 @@ func (s *hmacSession) Authorize(cc TPMCC, parms, decrypt, encrypt []byte, names 
 }
 
 // Validates the response session structure for the session.
+// Updates nonceTPM from the TPM's response.
 func (s *hmacSession) Validate(rc TPMRC, cc TPMCC, parms []byte, auth *TPMSAuthResponse) error {
 	// Track the new nonceTPM for the session.
 	s.nonceTPM = auth.Nonce
@@ -340,19 +396,45 @@ func (s *hmacSession) Validate(rc TPMRC, cc TPMCC, parms []byte, auth *TPMSAuthR
 }
 
 // IsEncryption returns true if this is an encryption session.
-// tpmdirect doesn't currently support using HMAC sessions for encryption.
-func (s *hmacSession) IsEncryption() bool { return false }
+func (s *hmacSession) IsEncryption() bool {
+	return s.attrs.Encrypt
+}
 
 // IsDecryption returns true if this is a decryption session.
-// tpmdirect doesn't currently support using HMAC sessions for decryption.
-func (s *hmacSession) IsDecryption() bool { return false }
+func (s *hmacSession) IsDecryption() bool {
+	return s.attrs.Decrypt
+}
 
 // If this session is used for parameter decryption, encrypts the
 // parameter. Otherwise, does not modify the parameter.
-// tpmdirect doesn't currently support using HMAC sessions for decryption.
-func (s *hmacSession) Encrypt(parameter []byte) error { return nil }
+func (s *hmacSession) Encrypt(parameter []byte) error {
+	if !s.IsDecryption() { return nil }
+	// Only AES-CFB is supported.
+	keyBytes := *s.symmetric.KeyBits.AES/8
+	bits := int(keyBytes) + 16
+	keyIV := KDFA(s.hash, s.auth, []byte("CFB"), s.nonceCaller.Buffer, s.nonceTPM.Buffer, bits)
+	key, err := aes.NewCipher(keyIV[:keyBytes])
+	if err != nil {
+		return err
+	}
+	stream := cipher.NewCFBEncrypter(key, keyIV[keyBytes:])
+	stream.XORKeyStream(parameter, parameter)
+	return nil
+}
 
 // If this session is used for parameter encryption, encrypts the
 // parameter. Otherwise, does not modify the parameter.
-// tpmdirect doesn't currently support using HMAC sessions for encryption.
-func (s *hmacSession) Decrypt(parameter []byte) error { return nil }
+func (s *hmacSession) Decrypt(parameter []byte) error {
+	if !s.IsEncryption() { return nil }
+	// Only AES-CFB is supported.
+	keyBytes := *s.symmetric.KeyBits.AES/8
+	bits := int(keyBytes) + 16
+	keyIV := KDFA(s.hash, s.auth, []byte("CFB"), s.nonceTPM.Buffer, s.nonceCaller.Buffer, bits)
+	key, err := aes.NewCipher(keyIV[:keyBytes])
+	if err != nil {
+		return err
+	}
+	stream := cipher.NewCFBDecrypter(key, keyIV[keyBytes:])
+	stream.XORKeyStream(parameter, parameter)
+	return nil
+}
