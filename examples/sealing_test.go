@@ -120,6 +120,38 @@ func TestUnseal(t *testing.T) {
 		}
 	})
 
+	// Create the blob with a separate decrypt and encrypt session
+	t.Run("CreateDecryptEncryptSeparate", func(t *testing.T) {
+		if err := tpm.Execute(&createBlobCmd, &createBlobRsp,
+			tpm2.HMAC(tpm2.TPMAlgSHA256, 16, tpm2.Auth(srkAuth)),
+			tpm2.HMAC(tpm2.TPMAlgSHA256, 16, tpm2.AESEncryption(128, tpm2.EncryptInOut))); err != nil {
+			t.Fatalf("%v", err)
+		}
+	})
+
+	// Create the blob with separate decrypt and encrypt sessions.
+	t.Run("CreateDecryptEncrypt2Separate", func(t *testing.T) {
+		if err := tpm.Execute(&createBlobCmd, &createBlobRsp,
+			tpm2.HMAC(tpm2.TPMAlgSHA256, 16, tpm2.Auth(srkAuth)),
+			// Get weird with the algorithm and nonce choices. Mix lots of things together.
+			tpm2.HMAC(tpm2.TPMAlgSHA1, 20, tpm2.AESEncryption(128, tpm2.EncryptIn)),
+			tpm2.HMAC(tpm2.TPMAlgSHA384, 23, tpm2.AESEncryption(128, tpm2.EncryptOut))); err != nil {
+			t.Fatalf("%v", err)
+		}
+	})
+
+	// Create the blob with separate encrypt and decrypt sessions.
+	// (The TPM spec orders some extra nonces included in the first session in the order
+	// nonceTPM_decrypt, nonceTPM_encrypt, so this exercises that)
+	t.Run("CreateDecryptEncrypt2Separate", func(t *testing.T) {
+		if err := tpm.Execute(&createBlobCmd, &createBlobRsp,
+			tpm2.HMAC(tpm2.TPMAlgSHA1, 16, tpm2.Auth(srkAuth)),
+			tpm2.HMAC(tpm2.TPMAlgSHA1, 17, tpm2.AESEncryption(128, tpm2.EncryptOut)),
+			tpm2.HMAC(tpm2.TPMAlgSHA256, 32, tpm2.AESEncryption(128, tpm2.EncryptIn))); err != nil {
+			t.Fatalf("%v", err)
+		}
+	})
+
 	// Load the sealed blob
 	loadBlobCmd := tpm2.LoadCommand{
 		ParentHandle: tpm2.NamedHandle{
@@ -201,7 +233,7 @@ func TestUnseal(t *testing.T) {
 
 	// Unseal the blob with a standalone HMAC session, re-using the session.
 	t.Run("WithHMACSession", func(t *testing.T) {
-		sess, cleanup, err := tpm2.HMACSession(tpm, tpm2.TPMAlgSHA256, 16, tpm2.Auth(auth2))
+		sess, cleanup, err := tpm2.HMACSession(tpm, tpm2.TPMAlgSHA1, 20, tpm2.Auth(auth2))
 		if err != nil {
 			t.Fatalf("%v", err)
 		}
@@ -219,6 +251,7 @@ func TestUnseal(t *testing.T) {
 	})
 
 	// Unseal the blob with a standalone HMAC session, re-using the session.
+	// Also, use session encryption.
 	t.Run("WithHMACSessionEncrypt", func(t *testing.T) {
 		sess, cleanup, err := tpm2.HMACSession(tpm, tpm2.TPMAlgSHA256, 16, tpm2.Auth(auth2), tpm2.AESEncryption(128, tpm2.EncryptOut))
 		if err != nil {
@@ -229,6 +262,31 @@ func TestUnseal(t *testing.T) {
 		// It should be possible to use the session multiple times.
 		for i := 0; i < 3; i++ {
 			if err := tpm.Execute(&unsealCmd, &unsealRsp, sess); err != nil {
+				t.Errorf("%v", err)
+			}
+			if !bytes.Equal(unsealRsp.OutData.Buffer, data) {
+				t.Errorf("want %x got %x", data, unsealRsp.OutData.Buffer)
+			}
+		}
+	})
+
+	// Unseal the blob with a standalone HMAC session, re-using the session.
+	// Spin up another session for encryption.
+	t.Run("WithHMACSessionEncryptSeparate", func(t *testing.T) {
+		sess1, cleanup1, err := tpm2.HMACSession(tpm, tpm2.TPMAlgSHA1, 16, tpm2.Auth(auth2))
+		if err != nil {
+			t.Fatalf("%v", err)
+		}
+		defer cleanup1()
+		sess2, cleanup2, err := tpm2.HMACSession(tpm, tpm2.TPMAlgSHA384, 16, tpm2.AESEncryption(128, tpm2.EncryptOut))
+		if err != nil {
+			t.Fatalf("%v", err)
+		}
+		defer cleanup2()
+
+		// It should be possible to use the sessions multiple times.
+		for i := 0; i < 3; i++ {
+			if err := tpm.Execute(&unsealCmd, &unsealRsp, sess1, sess2); err != nil {
 				t.Errorf("%v", err)
 			}
 			if !bytes.Equal(unsealRsp.OutData.Buffer, data) {

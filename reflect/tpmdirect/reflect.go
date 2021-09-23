@@ -717,22 +717,28 @@ func cmdSessions(tpm *TPM, sess []tpm2.Session, cc tpm2.TPMCC, names []tpm2.TPM2
 	if len(sess) == 0 {
 		return nil, nil
 	}
-	// Find the encryption and decryption session nonceTPMs, if any.
+	// Find the non-first-session encryption and decryption session nonceTPMs, if any.
 	var encNonceTPM, decNonceTPM []byte
-	for _, s := range sess {
-		if s.IsEncryption() {
-			if encNonceTPM != nil {
-				// Only one encrypt session is permitted.
-				return nil, fmt.Errorf("too many encrypt sessions")
+	if len(sess) > 0 {
+		for i := 1; i < len(sess); i++ {
+			s := sess[i]
+			if s.IsEncryption() {
+				if encNonceTPM != nil {
+					// Only one encrypt session is permitted.
+					return nil, fmt.Errorf("too many encrypt sessions")
+				}
+				encNonceTPM = s.NonceTPM()
+				// A session used for both encryption and decryption only
+				// needs its nonce counted once.
+				continue
 			}
-			encNonceTPM = s.NonceTPM()
-		}
-		if s.IsDecryption() {
-			if decNonceTPM != nil {
-				// Only one decrypt session is permitted.
-				return nil, fmt.Errorf("too many decrypt sessions")
+			if s.IsDecryption() {
+				if decNonceTPM != nil {
+					// Only one decrypt session is permitted.
+					return nil, fmt.Errorf("too many decrypt sessions")
+				}
+				decNonceTPM = s.NonceTPM()
 			}
-			decNonceTPM = s.NonceTPM()
 		}
 	}
 
@@ -741,7 +747,14 @@ func cmdSessions(tpm *TPM, sess []tpm2.Session, cc tpm2.TPMCC, names []tpm2.TPM2
 	buf.Write(make([]byte, 4))
 	// Calculate the authorization HMAC for each session
 	for i, s := range sess {
-		auth, err := s.Authorize(cc, parms, encNonceTPM, decNonceTPM, names)
+		var addNonces []byte
+		// Special case: the HMAC on the first authorization session of a command
+		// also includes any decryption and encryption nonceTPMs, too.
+		if i == 0 {
+			addNonces = append(addNonces, decNonceTPM...)
+			addNonces = append(addNonces, encNonceTPM...)
+		}
+		auth, err := s.Authorize(cc, parms, addNonces, names)
 		if err != nil {
 			return nil, fmt.Errorf("session %d: %w", i, err)
 		}

@@ -38,7 +38,7 @@ func (s *pwSession) NonceTPM() []byte { return nil }
 func (s *pwSession) NewNonceCaller() error { return nil }
 
 // Computes the authorization structure for the session.
-func (s *pwSession) Authorize(cc TPMCC, parms, decrypt, encrypt []byte, names []TPM2BName) (*TPMSAuthCommand, error) {
+func (s *pwSession) Authorize(cc TPMCC, parms, addNonces []byte, names []TPM2BName) (*TPMSAuthCommand, error) {
 	return &TPMSAuthCommand{
 		Handle:     TPMRSPW,
 		Nonce:      TPM2BNonce{},
@@ -304,7 +304,7 @@ func attrsToBytes(attrs TPMASession) []byte {
 // nonceOlder in a command is the last nonceTPM sent by the TPM for this session.
 //     This may be when the session was created, or the last time it was used.
 // nonceOlder in a response is the corresponding nonceCaller sent in the command.
-func computeHMAC(alg TPMIAlgHash, key, parms, nonceNewer, nonceOlder []byte, attrs TPMASession) ([]byte, error) {
+func computeHMAC(alg TPMIAlgHash, key, parms, nonceNewer, nonceOlder, addNonces []byte, attrs TPMASession) ([]byte, error) {
 	h := alg.Hash()
 	h.Write(parms)
 	pHash := h.Sum(nil)
@@ -312,6 +312,7 @@ func computeHMAC(alg TPMIAlgHash, key, parms, nonceNewer, nonceOlder []byte, att
 	mac.Write(pHash)
 	mac.Write(nonceNewer)
 	mac.Write(nonceOlder)
+	mac.Write(addNonces)
 	mac.Write(attrsToBytes(attrs))
 	return mac.Sum(nil), nil
 }
@@ -335,13 +336,11 @@ func (s *hmacSession) NewNonceCaller() error {
 }
 
 // Computes the authorization structure for the session.
-// Updates nonceCaller to be a new random nonce.
-func (s *hmacSession) Authorize(cc TPMCC, parms, decrypt, encrypt []byte, names []TPM2BName) (*TPMSAuthCommand, error) {
+func (s *hmacSession) Authorize(cc TPMCC, parms, addNonces []byte, names []TPM2BName) (*TPMSAuthCommand, error) {
 	if s.handle == TPMRHNull {
 		// Session is not initialized.
 		return nil, fmt.Errorf("session not initialized")
 	}
-	// Generate a new nonceCaller for the command.
 	// Calculate the parameter buffer for the HMAC.
 	var parmBuf bytes.Buffer
 	binary.Write(&parmBuf, binary.BigEndian, cc)
@@ -352,7 +351,8 @@ func (s *hmacSession) Authorize(cc TPMCC, parms, decrypt, encrypt []byte, names 
 
 	key := hmacKeyFromAuthValue(s.auth)
 	// Compute the authorization HMAC.
-	hmac, err := computeHMAC(s.hash, key, parmBuf.Bytes(), s.nonceCaller.Buffer, s.nonceTPM.Buffer, s.attrs)
+	hmac, err := computeHMAC(s.hash, key, parmBuf.Bytes(),
+		s.nonceCaller.Buffer, s.nonceTPM.Buffer, addNonces, s.attrs)
 	if err != nil {
 		return nil, err
 	}
@@ -380,7 +380,8 @@ func (s *hmacSession) Validate(rc TPMRC, cc TPMCC, parms []byte, auth *TPMSAuthR
 
 	key := hmacKeyFromAuthValue(s.auth)
 	// Compute the authorization HMAC.
-	mac, err := computeHMAC(s.hash, key, parmBuf.Bytes(), s.nonceTPM.Buffer, s.nonceCaller.Buffer, auth.Attributes)
+	mac, err := computeHMAC(s.hash, key, parmBuf.Bytes(),
+		s.nonceTPM.Buffer, s.nonceCaller.Buffer, nil, auth.Attributes)
 	if err != nil {
 		return err
 	}
