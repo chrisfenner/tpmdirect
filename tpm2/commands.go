@@ -107,7 +107,7 @@ type LoadCommand struct {
 	InPublic TPM2BPublic
 }
 
-func (_ LoadCommand) Command() TPMCC { return TPMCCLoad }
+func (_ *LoadCommand) Command() TPMCC { return TPMCCLoad }
 
 type LoadResponse struct {
 	// handle of type TPM_HT_TRANSIENT for loaded object
@@ -123,7 +123,7 @@ type UnsealCommand struct {
 	ItemHandle NamedHandle `tpmdirect:"handle,auth"`
 }
 
-func (_ UnsealCommand) Command() TPMCC { return TPMCCUnseal }
+func (_ *UnsealCommand) Command() TPMCC { return TPMCCUnseal }
 
 type UnsealResponse struct {
 	OutData TPM2BSensitiveData
@@ -148,7 +148,7 @@ type CreatePrimaryCommand struct {
 	CreationPCR TPMLPCRSelection
 }
 
-func (_ CreatePrimaryCommand) Command() TPMCC { return TPMCCCreatePrimary }
+func (_ *CreatePrimaryCommand) Command() TPMCC { return TPMCCCreatePrimary }
 
 type CreatePrimaryResponse struct {
 	// handle of type TPM_HT_TRANSIENT for created Primary Object
@@ -174,7 +174,7 @@ type FlushContextCommand struct {
 	FlushHandle TPMIDHContext
 }
 
-func (_ FlushContextCommand) Command() TPMCC { return TPMCCFlushContext }
+func (_ *FlushContextCommand) Command() TPMCC { return TPMCCFlushContext }
 
 type FlushContextResponse struct {
 }
