@@ -84,16 +84,16 @@ func (s *pwSession) Encrypt(parameter []byte) error { return nil }
 // Password sessions can't be used for encryption.
 func (s *pwSession) Decrypt(parameter []byte) error { return nil }
 
-// authOptions represents extra options used when setting up a session.
-type authOptions struct {
-	encryption bool
-	decryption bool
+// sessionOptions represents extra options used when setting up a session.
+type sessionOptions struct {
+	auth      []byte
+	attrs     TPMASession
 	symmetric TPMTSymDef
 }
 
 // defaultOptions represents the default options used when none are provided.
-func defaultOptions() authOptions {
-	return authOptions{
+func defaultOptions() sessionOptions {
+	return sessionOptions{
 		symmetric: TPMTSymDef{
 			Algorithm: TPMAlgNull,
 		},
@@ -101,30 +101,32 @@ func defaultOptions() authOptions {
 }
 
 // AuthOption is an option for setting up an auth session variadically.
-type AuthOption func(*authOptions)
+type AuthOption func(*sessionOptions)
 
-// AES encryption uses the session to encrypt the first parameter returned from the TPM.
-// Multiple AESEncrypt/AESDecrypt calls will take the key size of the last one provided.
-func AESEncrypt(keySize TPMKeyBits) AuthOption {
-	return func(o *authOptions) {
-		o.encryption = true
-		o.symmetric = TPMTSymDef{
-			Algorithm: TPMAlgAES,
-			KeyBits: TPMUSymKeyBits{
-				AES: NewTPMKeyBits(keySize),
-			},
-			Mode: TPMUSymMode{
-				AES: NewTPMAlgID(TPMAlgCFB),
-			},
-		}
+// Auth specifies the object's auth value.
+func Auth(auth []byte) AuthOption {
+	return func(o *sessionOptions) {
+		o.auth = auth
 	}
 }
 
-// AES encryption uses the session to encrypt the first parameter provided to the TPM.
-// Multiple AESEncrypt/AESDecrypt calls will take the key size of the last one provided.
-func AESDecrypt(keySize TPMKeyBits) AuthOption {
-	return func(o *authOptions) {
-		o.decryption = true
+// parameterEncryptionDirection specifies whether the session-encrypted parameters
+// are encrypted on the way into the TPM, out of the TPM, or both.
+type parameterEncryptionDirection int
+
+const (
+	EncryptIn parameterEncryptionDirection = 1 + iota
+	EncryptOut
+	EncryptInOut
+)
+
+// AESEncryption uses the session to encrypt the first parameter sent to/from the TPM.
+// Note that only commands whose first command/response parameter is a 2B can
+// support session encryption.
+func AESEncryption(keySize TPMKeyBits, dir parameterEncryptionDirection) AuthOption {
+	return func(o *sessionOptions) {
+		o.attrs.Decrypt = (dir == EncryptIn || dir == EncryptInOut)
+		o.attrs.Encrypt = (dir == EncryptOut || dir == EncryptInOut)
 		o.symmetric = TPMTSymDef{
 			Algorithm: TPMAlgAES,
 			KeyBits: TPMUSymKeyBits{
@@ -147,54 +149,48 @@ type hmacSession struct {
 	// last nonceCaller
 	nonceCaller TPM2BNonce
 	// last nonceTPM
-	nonceTPM TPM2BNonce
+	nonceTPM  TPM2BNonce
 	symmetric TPMTSymDef
 }
 
-// HMACAuth sets up a just-in-time HMAC session that is used only once.
+// HMAC sets up a just-in-time HMAC session that is used only once.
 // A real session is created, but just in time and it is flushed when used.
-func HMACAuth(hash TPMIAlgHash, nonceSize int, auth []byte, opts ...AuthOption) Session {
+func HMAC(hash TPMIAlgHash, nonceSize int, opts ...AuthOption) Session {
 	// Set up a one-off session that knows the auth value.
 	sess := hmacSession{
 		hash:      hash,
 		nonceSize: nonceSize,
 		handle:    TPMRHNull,
-		auth:      auth,
-		attrs: TPMASession{
-			ContinueSession: false,
-		},
 	}
 	// Start with the default options, then apply any that were provided.
 	o := defaultOptions()
 	for _, opt := range opts {
 		opt(&o)
 	}
+	sess.auth = o.auth
 	sess.symmetric = o.symmetric
-	sess.attrs.Encrypt = o.encryption
-	sess.attrs.Decrypt = o.decryption
+	sess.attrs = o.attrs
 	return &sess
 }
 
 // HMACSession sets up a reusable HMAC session that needs to be closed.
-func HMACSession(tpm Interface, hash TPMIAlgHash, nonceSize int, auth []byte, opts ...AuthOption) (s Session, close func() error, err error) {
+func HMACSession(tpm Interface, hash TPMIAlgHash, nonceSize int, opts ...AuthOption) (s Session, close func() error, err error) {
 	// Set up a not-one-off session that knows the auth value.
 	sess := hmacSession{
 		hash:      hash,
 		nonceSize: nonceSize,
 		handle:    TPMRHNull,
-		auth:      auth,
-		attrs: TPMASession{
-			ContinueSession: true,
-		},
 	}
 	// Start with the default options, then apply any that were provided.
 	o := defaultOptions()
 	for _, opt := range opts {
 		opt(&o)
 	}
+	sess.auth = o.auth
 	sess.symmetric = o.symmetric
-	sess.attrs.Encrypt = o.encryption
-	sess.attrs.Decrypt = o.decryption
+	sess.attrs = o.attrs
+	// This session is reusable and is closed with the function we'll return.
+	sess.attrs.ContinueSession = true
 
 	// Initialize the session.
 	if err := sess.Init(tpm); err != nil {
@@ -234,8 +230,8 @@ func (s *hmacSession) Init(tpm Interface) error {
 		Bind:        TPMRHNull,
 		NonceCaller: s.nonceCaller,
 		SessionType: TPMSEHMAC,
-		Symmetric: s.symmetric,
-		AuthHash: s.hash,
+		Symmetric:   s.symmetric,
+		AuthHash:    s.hash,
 	}
 	var sasRsp StartAuthSessionResponse
 	if err := tpm.Execute(&sasCmd, &sasRsp); err != nil {
@@ -408,9 +404,11 @@ func (s *hmacSession) IsDecryption() bool {
 // If this session is used for parameter decryption, encrypts the
 // parameter. Otherwise, does not modify the parameter.
 func (s *hmacSession) Encrypt(parameter []byte) error {
-	if !s.IsDecryption() { return nil }
+	if !s.IsDecryption() {
+		return nil
+	}
 	// Only AES-CFB is supported.
-	keyBytes := *s.symmetric.KeyBits.AES/8
+	keyBytes := *s.symmetric.KeyBits.AES / 8
 	bits := int(keyBytes) + 16
 	keyIV := KDFA(s.hash, s.auth, []byte("CFB"), s.nonceCaller.Buffer, s.nonceTPM.Buffer, bits)
 	key, err := aes.NewCipher(keyIV[:keyBytes])
@@ -425,9 +423,11 @@ func (s *hmacSession) Encrypt(parameter []byte) error {
 // If this session is used for parameter encryption, encrypts the
 // parameter. Otherwise, does not modify the parameter.
 func (s *hmacSession) Decrypt(parameter []byte) error {
-	if !s.IsEncryption() { return nil }
+	if !s.IsEncryption() {
+		return nil
+	}
 	// Only AES-CFB is supported.
-	keyBytes := *s.symmetric.KeyBits.AES/8
+	keyBytes := *s.symmetric.KeyBits.AES / 8
 	bits := int(keyBytes) + 16
 	keyIV := KDFA(s.hash, s.auth, []byte("CFB"), s.nonceTPM.Buffer, s.nonceCaller.Buffer, bits)
 	key, err := aes.NewCipher(keyIV[:keyBytes])
