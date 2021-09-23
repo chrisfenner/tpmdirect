@@ -394,100 +394,157 @@ var warnDescs = map[TPMRC]errorDesc{
 	},
 }
 
-// ErrorSubject represents a subject of a TPM error code with additional details (i.e., FMT1 codes)
-type ErrorSubject int
+// subject represents a subject of a TPM error code with additional details (i.e., FMT1 codes)
+type subject int
 
 const (
-	UnknownSubject ErrorSubject = iota
-	HandleError
-	ParameterError
-	SessionError
+	handle subject = iota + 1
+	parameter
+	session
 )
 
 // String returns the string representation of the ErrorSubject.
-func (s ErrorSubject) String() string {
+func (s subject) String() string {
 	switch s {
-	case HandleError:
+	case handle:
 		return "handle"
-	case ParameterError:
+	case parameter:
 		return "parameter"
-	case SessionError:
+	case session:
 		return "session"
 	default:
 		return "unknown subject"
 	}
 }
 
-// ErrorDetails represents additional information about the error.
-type ErrorDetails struct {
+// Fmt1Error represents a TPM 2.0 format-1 error, with additional information.
+type Fmt1Error struct {
 	// The canonical TPM error code, with handle/parameter/session info stripped out.
-	CanonicalCode TPMRC
+	canonical TPMRC
 	// Whether this was a handle, parameter, or session error.
-	Subject ErrorSubject
+	subject subject
 	// Which handle, parameter, or session was in error
-	Index int
+	index int
 }
 
-// String returns the string representation of the ErrorDetails.
-func (d ErrorDetails) String() string {
-	return fmt.Sprintf("%v %d", d.Subject, d.Index)
+// Error returns the string representation of the error.
+func (e Fmt1Error) Error() string {
+	desc, ok := fmt1Descs[e.canonical]
+	if !ok {
+		return fmt.Sprintf("unknown format-1 error: %s %d (%x)", e.subject, e.index, uint32(e.canonical))
+	}
+	return fmt.Sprintf("%s (%v %d): %s", desc.name, e.subject, e.index, desc.description)
 }
 
-// IsFmt0Error returns true if the result is a format-0 error.
-func (r TPMRC) IsFmt0Error() bool {
+// Handle returns whether the error is handle-related and if so, which handle is in error.
+func (e Fmt1Error) Handle() (bool, int) {
+	if e.subject != handle {
+		return false, 0
+	}
+	return true, e.index
+}
+
+// Parameter returns whether the error is handle-related and if so, which handle is in error.
+func (e Fmt1Error) Parameter() (bool, int) {
+	if e.subject != parameter {
+		return false, 0
+	}
+	return true, e.index
+}
+
+// Session returns whether the error is handle-related and if so, which handle is in error.
+func (e Fmt1Error) Session() (bool, int) {
+	if e.subject != session {
+		return false, 0
+	}
+	return true, e.index
+}
+
+// isFmt0Error returns true if the result is a format-0 error.
+func (r TPMRC) isFmt0Error() bool {
 	return (r&rcVer1) == rcVer1 && (r&rcWarn) != rcWarn
 }
 
-// IsFmt1Error returns true and some details if the result is a format-1 error.
-func (r TPMRC) IsFmt1Error() (bool, ErrorDetails) {
+// isFmt1Error returns true and a format-1 error structure if the error is a format-1 error.
+func (r TPMRC) isFmt1Error() (bool, Fmt1Error) {
 	if (r & rcFmt1) != rcFmt1 {
-		return false, ErrorDetails{}
+		return false, Fmt1Error{}
 	}
-	subj := HandleError
+	subj := handle
 	if (r & rcP) == rcP {
-		subj = ParameterError
+		subj = parameter
 		r ^= rcP
 	} else if (r & rcS) == rcS {
-		subj = SessionError
+		subj = session
 		r ^= rcS
 	}
 	idx := int((r & 0xF00) >> 8)
 	r &= 0xFFFFF0FF
-	return true, ErrorDetails{
-		CanonicalCode: r,
-		Subject:       subj,
-		Index:         idx,
+	return true, Fmt1Error{
+		canonical: r,
+		subject:   subj,
+		index:     idx,
 	}
 }
 
 // IsWarning returns true if the error is a warning code.
 // This usually indicates a problem with the TPM state, and not the command.
+// Retrying the command later may succeed.
 func (r TPMRC) IsWarning() bool {
+	if isFmt1, _ := r.isFmt1Error(); isFmt1 {
+		// There aren't any format-1 warnings.
+		return false
+	}
 	return (r&rcVer1) == rcVer1 && (r&rcWarn) == rcWarn
 }
 
 // Error produces a nice human-readable representation of the error, parsing TPM FMT1 errors as needed.
 func (r TPMRC) Error() string {
-	if isFmt1, details := r.IsFmt1Error(); isFmt1 {
-		desc, ok := fmt1Descs[details.CanonicalCode]
-		if !ok {
-			return fmt.Sprintf("unknown format-1 error: %s (%x)", details, uint32(details.CanonicalCode))
-		}
-		return fmt.Sprintf("%s (%v %d): %s", desc.name, details.Subject, details.Index, desc.description)
+	if isFmt1, fmt1 := r.isFmt1Error(); isFmt1 {
+		return fmt1.Error()
 	}
-	if r.IsFmt0Error() {
+	if r.isFmt0Error() {
 		desc, ok := fmt0Descs[r]
 		if !ok {
-			return fmt.Sprintf("unknown format-0 error code (%x)", uint32(r))
+			return fmt.Sprintf("unknown format-0 error code (0x%x)", uint32(r))
 		}
 		return fmt.Sprintf("%s: %s", desc.name, desc.description)
 	}
 	if r.IsWarning() {
 		desc, ok := warnDescs[r]
 		if !ok {
-			return fmt.Sprintf("unknown warning (%x)", uint32(r))
+			return fmt.Sprintf("unknown warning (0x%x)", uint32(r))
 		}
 		return fmt.Sprintf("%s: %s", desc.name, desc.description)
 	}
-	return fmt.Sprintf("unrecognized error code (%x)", uint32(r))
+	return fmt.Sprintf("unrecognized error code (0x%x)", uint32(r))
+}
+
+// Is returns whether the TPMRC (which may be a FMT1 error) is equal to the
+// given canonical error.
+func (r TPMRC) Is(target error) bool {
+	targetRC, ok := target.(TPMRC)
+	if !ok {
+		return false
+	}
+	if isFmt1, fmt1 := r.isFmt1Error(); isFmt1 {
+		return fmt1.canonical == targetRC
+	}
+	return r == targetRC
+}
+
+// As returns whether the error can be assigned to the given interface type.
+// If supported, it updates the value pointed at by target.
+// Supports the Fmt1Error type.
+func (r TPMRC) As(target interface{}) bool {
+	pFmt1, ok := target.(*Fmt1Error)
+	if !ok {
+		return false
+	}
+	isFmt1, fmt1 := r.isFmt1Error()
+	if !isFmt1 {
+		return false
+	}
+	*pFmt1 = fmt1
+	return true
 }
