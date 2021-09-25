@@ -29,14 +29,16 @@ type Session interface {
 	NonceTPM() []byte
 	// Updates nonceCaller to a new random value.
 	NewNonceCaller() error
+	// Returns the authorized name associated with the session, if any.
+	AuthorizedName() []byte
 	// Computes the authorization HMAC for the session.
 	// If this is the first authorization session for a command, and
 	// there is another session (or sessions) for parameter
 	// decryption and/or encryption, then addNonces contains the
 	// nonceTPMs from each of them, respectively (see Part 1, 19.6.5)
-	Authorize(cc TPMCC, parms, addNonces []byte, names []TPM2BName) (*TPMSAuthCommand, error)
+	Authorize(cc TPMCC, parms, addNonces []byte, names []byte) (*TPMSAuthCommand, error)
 	// Validates the response for the session.
-	// Updates NonceTPM for the session, and generates a new NonceCaller.
+	// Updates NonceTPM for the session.
 	Validate(rc TPMRC, cc TPMCC, parms []byte, auth *TPMSAuthResponse) error
 	// Returns true if this is an encryption session.
 	IsEncryption() bool

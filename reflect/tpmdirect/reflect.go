@@ -67,11 +67,7 @@ func (t *TPM) Execute(cmd tpm2.Command, rsp tpm2.Response, sess ...tpm2.Session)
 	if err != nil {
 		return err
 	}
-	names := cmdNames(cmd)
-	if len(names) > len(sess) {
-		panic(fmt.Sprintf("command requires at least %v sessions, got %v", len(names), len(sess)))
-	}
-	sessions, err := cmdSessions(t, sess, cc, names, parms)
+	sessions, err := cmdSessions(t, sess, cc, parms)
 	if err != nil {
 		return err
 	}
@@ -655,23 +651,6 @@ func cmdHandles(cmd tpm2.Command) []byte {
 	return result.Bytes()
 }
 
-// cmdNames returns all the names for the command.
-func cmdNames(cmd tpm2.Command) []tpm2.TPM2BName {
-	handles := taggedMembers(reflect.ValueOf(cmd).Elem(), "auth", false)
-	var result []tpm2.TPM2BName
-	for i, handle := range handles {
-		named, ok := handle.Interface().(tpm2.NamedHandle)
-		if !ok {
-			panic(fmt.Sprintf("parameter %d of type %v with tag 'auth', want tpm2.NamedHandle",
-				i, reflect.TypeOf(handle)))
-		}
-		result = append(result, tpm2.TPM2BName{
-			Buffer: named.Name,
-		})
-	}
-	return result
-}
-
 // cmdParameters returns the parameters area of the command.
 // The first parameter may be encrypted by one of the sessions.
 func cmdParameters(cmd tpm2.Command, sess []tpm2.Session) ([]byte, error) {
@@ -712,7 +691,7 @@ func cmdParameters(cmd tpm2.Command, sess []tpm2.Session) ([]byte, error) {
 }
 
 // cmdSessions returns the authorization area of the command.
-func cmdSessions(tpm *TPM, sess []tpm2.Session, cc tpm2.TPMCC, names []tpm2.TPM2BName, parms []byte) ([]byte, error) {
+func cmdSessions(tpm *TPM, sess []tpm2.Session, cc tpm2.TPMCC, parms []byte) ([]byte, error) {
 	// There is no authorization area if there are no sessions.
 	if len(sess) == 0 {
 		return nil, nil
@@ -740,6 +719,11 @@ func cmdSessions(tpm *TPM, sess []tpm2.Session, cc tpm2.TPMCC, names []tpm2.TPM2
 				decNonceTPM = s.NonceTPM()
 			}
 		}
+	}
+	// Find all the names being authorized by this command.
+	var names []byte
+	for _, s := range sess {
+		names = append(names, s.AuthorizedName()...)
 	}
 
 	buf := bytes.NewBuffer(make([]byte, 0, 1024))

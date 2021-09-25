@@ -12,13 +12,15 @@ import (
 
 // pwSession represents a password-pseudo-session.
 type pwSession struct {
-	auth []byte
+	auth     []byte
+	authName []byte
 }
 
 // PasswordAuth assembles a password pseudo-session with the given auth value.
-func PasswordAuth(auth []byte) Session {
+func PasswordAuth(name, auth []byte) Session {
 	return &pwSession{
-		auth: auth,
+		auth:     auth,
+		authName: name,
 	}
 }
 
@@ -37,8 +39,13 @@ func (s *pwSession) NonceTPM() []byte { return nil }
 // Password sessions don't have nonces.
 func (s *pwSession) NewNonceCaller() error { return nil }
 
+// AuthorizedName returns the Name of the object being authorized.
+func (s *pwSession) AuthorizedName() []byte {
+	return s.authName
+}
+
 // Computes the authorization structure for the session.
-func (s *pwSession) Authorize(cc TPMCC, parms, addNonces []byte, names []TPM2BName) (*TPMSAuthCommand, error) {
+func (s *pwSession) Authorize(cc TPMCC, parms, addNonces []byte, names []byte) (*TPMSAuthCommand, error) {
 	return &TPMSAuthCommand{
 		Handle:     TPMRSPW,
 		Nonce:      TPM2BNonce{},
@@ -87,6 +94,7 @@ func (s *pwSession) Decrypt(parameter []byte) error { return nil }
 // sessionOptions represents extra options used when setting up a session.
 type sessionOptions struct {
 	auth      []byte
+	authName  []byte
 	attrs     TPMASession
 	symmetric TPMTSymDef
 }
@@ -103,9 +111,10 @@ func defaultOptions() sessionOptions {
 // AuthOption is an option for setting up an auth session variadically.
 type AuthOption func(*sessionOptions)
 
-// Auth specifies the object's auth value.
-func Auth(auth []byte) AuthOption {
+// Auth specifies the named object's auth value.
+func Auth(name, auth []byte) AuthOption {
 	return func(o *sessionOptions) {
+		o.authName = name
 		o.auth = auth
 	}
 }
@@ -145,6 +154,7 @@ type hmacSession struct {
 	nonceSize int
 	handle    TPMHandle
 	auth      []byte
+	authName  []byte
 	attrs     TPMASession
 	// last nonceCaller
 	nonceCaller TPM2BNonce
@@ -168,6 +178,7 @@ func HMAC(hash TPMIAlgHash, nonceSize int, opts ...AuthOption) Session {
 		opt(&o)
 	}
 	sess.auth = o.auth
+	sess.authName = o.authName
 	sess.symmetric = o.symmetric
 	sess.attrs = o.attrs
 	return &sess
@@ -187,6 +198,7 @@ func HMACSession(tpm Interface, hash TPMIAlgHash, nonceSize int, opts ...AuthOpt
 		opt(&o)
 	}
 	sess.auth = o.auth
+	sess.authName = o.authName
 	sess.symmetric = o.symmetric
 	sess.attrs = o.attrs
 	// This session is reusable and is closed with the function we'll return.
@@ -335,8 +347,13 @@ func (s *hmacSession) NewNonceCaller() error {
 	return err
 }
 
+// AuthorizedName returns the Name of the object being authorized.
+func (s *hmacSession) AuthorizedName() []byte {
+	return s.authName
+}
+
 // Computes the authorization structure for the session.
-func (s *hmacSession) Authorize(cc TPMCC, parms, addNonces []byte, names []TPM2BName) (*TPMSAuthCommand, error) {
+func (s *hmacSession) Authorize(cc TPMCC, parms, addNonces []byte, names []byte) (*TPMSAuthCommand, error) {
 	if s.handle == TPMRHNull {
 		// Session is not initialized.
 		return nil, fmt.Errorf("session not initialized")
@@ -344,9 +361,7 @@ func (s *hmacSession) Authorize(cc TPMCC, parms, addNonces []byte, names []TPM2B
 	// Calculate the parameter buffer for the HMAC.
 	var parmBuf bytes.Buffer
 	binary.Write(&parmBuf, binary.BigEndian, cc)
-	for _, name := range names {
-		parmBuf.Write(name.Buffer)
-	}
+	parmBuf.Write(names)
 	parmBuf.Write(parms)
 
 	key := hmacKeyFromAuthValue(s.auth)
