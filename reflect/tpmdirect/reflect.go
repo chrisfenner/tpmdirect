@@ -50,8 +50,13 @@ func (t *TPM) Execute(cmd tpm2.Command, rsp tpm2.Response, sess ...tpm2.Session)
 		panic(fmt.Sprintf("cmd and rsp must be for same command: %v != %v", cc, rsp.Response()))
 	}
 	hasSessions := len(sess) > 0
+	wantSessions := numAuthHandles(cmd)
+	if len(sess) < wantSessions {
+		return fmt.Errorf("not enough sessions: command '%v' needs %d or more authorization sessions",
+			reflect.TypeOf(cmd), wantSessions)
+	}
 	if len(sess) > 3 {
-		panic(fmt.Sprintf("too many sessions: %v", len(sess)))
+		return fmt.Errorf("too many sessions: %v", len(sess))
 	}
 	// Initialize the sessions, if needed
 	for i, s := range sess {
@@ -636,6 +641,18 @@ func taggedMembers(v reflect.Value, tag string, invert bool) []reflect.Value {
 		}
 	}
 
+	return result
+}
+
+// numAuthHandles returns the number of authorization sessions needed for the command.
+func numAuthHandles(cmd tpm2.Command) int {
+	result := 0
+	cmdType := reflect.TypeOf(cmd).Elem()
+	for i := 0; i < cmdType.NumField(); i++ {
+		if hasTag(cmdType.Field(i), "auth") {
+			result++
+		}
+	}
 	return result
 }
 
