@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/aes"
 	"crypto/cipher"
+	"crypto/elliptic"
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/rsa"
@@ -300,13 +301,30 @@ func getEncryptedSaltRSA(nameAlg TPMIAlgHash, parms *TPMSRSAParms, pub *TPM2BPub
 }
 
 // Part 1, 19.6.13
-func getEncryptedSaltECC(parms *TPMSECCParms, pub *TPMSECCPoint) (*TPM2BEncryptedSecret, []byte, error) {
-	_, err := eccPub(parms, pub)
+func getEncryptedSaltECC(nameAlg TPMIAlgHash, parms *TPMSECCParms, pub *TPMSECCPoint) (*TPM2BEncryptedSecret, []byte, error) {
+	curve, err := parms.CurveID.Curve()
 	if err != nil {
-		return nil, nil, fmt.Errorf("could not encrypt salt to RSA key: %w", err)
+		return nil, nil, fmt.Errorf("could not encrypt salt to ECC key: %w", err)
 	}
-	// TODO
-	return nil, nil, fmt.Errorf("TODO")
+	eccPub, err := eccPub(parms, pub)
+	if err != nil {
+		return nil, nil, fmt.Errorf("could not encrypt salt to ECC key: %w", err)
+	}
+	ephPriv, ephPubX, ephPubY, err := elliptic.GenerateKey(curve, rand.Reader)
+	if err != nil {
+		return nil, nil, fmt.Errorf("could not encrypt salt to ECC key: %w", err)
+	}
+	zx, _ := curve.Params().ScalarMult(eccPub.x, eccPub.y, ephPriv)
+	salt := KDFe(nameAlg, zx.Bytes(), []byte("SECRET\x00"), ephPubX.Bytes(), pub.X.Buffer, nameAlg.Hash().Size())
+
+	var encSalt bytes.Buffer
+	binary.Write(&encSalt, binary.BigEndian, uint16(len(ephPubX.Bytes())))
+	encSalt.Write(ephPubX.Bytes())
+	binary.Write(&encSalt, binary.BigEndian, uint16(len(ephPubY.Bytes())))
+	encSalt.Write(ephPubY.Bytes())
+	return &TPM2BEncryptedSecret{
+		Buffer: encSalt.Bytes(),
+	}, salt, nil
 }
 
 // getEncryptedSalt creates a salt value for salted sessions.
@@ -316,7 +334,7 @@ func getEncryptedSalt(pub TPMTPublic) (*TPM2BEncryptedSecret, []byte, error) {
 	case TPMAlgRSA:
 		return getEncryptedSaltRSA(pub.NameAlg, pub.Parameters.RSADetail, pub.Unique.RSA)
 	case TPMAlgECC:
-		return getEncryptedSaltECC(pub.Parameters.ECCDetail, pub.Unique.ECC)
+		return getEncryptedSaltECC(pub.NameAlg, pub.Parameters.ECCDetail, pub.Unique.ECC)
 	default:
 		return nil, nil, fmt.Errorf("salt encryption alg '%v' not supported", pub.Type)
 	}

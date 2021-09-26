@@ -43,4 +43,53 @@ var (
 			},
 		},
 	}
+	ECCSRKTemplate = TPM2BPublic{
+		PublicArea: TPMTPublic{
+			Type:    TPMAlgECC,
+			NameAlg: TPMAlgSHA256,
+			ObjectAttributes: TPMAObject{
+				FixedTPM:             true,
+				STClear:              false,
+				FixedParent:          true,
+				SensitiveDataOrigin:  true,
+				UserWithAuth:         true,
+				AdminWithPolicy:      false,
+				NoDA:                 true,
+				EncryptedDuplication: false,
+				Restricted:           true,
+				Decrypt:              true,
+				SignEncrypt:          false,
+			},
+			Parameters: TPMUPublicParms{
+				ECCDetail: &TPMSECCParms{
+					Symmetric: TPMTSymDefObject{
+						Algorithm: TPMAlgAES,
+						KeyBits: TPMUSymKeyBits{
+							AES: NewTPMKeyBits(128),
+						},
+						Mode: TPMUSymMode{
+							AES: NewTPMAlgID(TPMAlgCFB),
+						},
+					},
+					Scheme: TPMTECCScheme{
+						Scheme: TPMAlgNull,
+					},
+					CurveID: TPMECCNistP256,
+					KDF: TPMTKDFScheme{
+						Scheme: TPMAlgNull,
+					},
+				},
+			},
+			Unique: TPMUPublicID{
+				ECC: &TPMSECCPoint{
+					X: TPM2BECCParameter{
+						Buffer: make([]byte, 32),
+					},
+					Y: TPM2BECCParameter{
+						Buffer: make([]byte, 32),
+					},
+				},
+			},
+		},
+	}
 )

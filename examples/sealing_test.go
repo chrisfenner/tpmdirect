@@ -11,6 +11,20 @@ import (
 
 // Test creating and unsealing a sealed data blob with a password and HMAC.
 func TestUnseal(t *testing.T) {
+	templates := map[string]tpm2.TPM2BPublic{
+		"RSA": tpm2.RSASRKTemplate,
+		"ECC": tpm2.ECCSRKTemplate,
+	}
+
+	// Run the whole test for each of RSA and ECC SRKs.
+	for name, srkTemplate := range templates {
+		t.Run(name, func(t *testing.T) {
+			unsealingTest(t, srkTemplate)
+		})
+	}
+}
+
+func unsealingTest(t *testing.T, srkTemplate tpm2.TPM2BPublic) {
 	tpm, err := tpmdirect.Open(tpm2.LocalSimulator)
 	if err != nil {
 		t.Fatalf("could not connect to TPM simulator: %v", err)
@@ -29,7 +43,7 @@ func TestUnseal(t *testing.T) {
 				},
 			},
 		},
-		InPublic: tpm2.RSASRKTemplate,
+		InPublic: srkTemplate,
 	}
 	var createSRKRsp tpm2.CreatePrimaryResponse
 	if err := tpm.Execute(&createSRKCmd, &createSRKRsp,
