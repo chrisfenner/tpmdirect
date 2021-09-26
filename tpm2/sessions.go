@@ -613,3 +613,291 @@ func (s *hmacSession) Decrypt(parameter []byte) error {
 func (s *hmacSession) Handle() TPMHandle {
 	return s.handle
 }
+
+type policyCallback = func(tpm Interface, handle TPMISHPolicy) error
+
+// policySession generally implements the policy session.
+type policySession struct {
+	sessionOptions
+	hash       TPMIAlgHash
+	nonceSize  int
+	handle     TPMHandle
+	sessionKey []byte
+	// last nonceCaller
+	nonceCaller TPM2BNonce
+	// last nonceTPM
+	nonceTPM          TPM2BNonce
+	callback          *policyCallback
+	isAuthValueNeeded bool
+}
+
+// Policy sets up a just-in-time policy session that is used only once.
+// A real session is created, but just in time and it is flushed when used.
+func Policy(hash TPMIAlgHash, nonceSize int, authName []byte, callback policyCallback, opts ...AuthOption) Session {
+	// Set up a one-off session that knows the auth value.
+	sess := policySession{
+		sessionOptions: defaultOptions(),
+		hash:           hash,
+		nonceSize:      nonceSize,
+		handle:         TPMRHNull,
+		callback:       &callback,
+	}
+	sess.authName = authName
+	for _, opt := range opts {
+		opt(&sess.sessionOptions)
+	}
+	return &sess
+}
+
+// PolicySession sets up a reusable policy session that needs to be closed.
+func PolicySession(tpm Interface, hash TPMIAlgHash, nonceSize int, authName []byte, opts ...AuthOption) (s Session, close func() error, err error) {
+	// Set up a not-one-off session that knows the auth value.
+	sess := policySession{
+		sessionOptions: defaultOptions(),
+		hash:           hash,
+		nonceSize:      nonceSize,
+		handle:         TPMRHNull,
+	}
+	sess.authName = authName
+	for _, opt := range opts {
+		opt(&sess.sessionOptions)
+	}
+
+	// This session is reusable and is closed with the function we'll return.
+	sess.sessionOptions.attrs.ContinueSession = true
+
+	// Initialize the session.
+	if err := sess.Init(tpm); err != nil {
+		return nil, nil, err
+	}
+
+	closer := func() error {
+		flushCmd := FlushContextCommand{
+			FlushHandle: sess.handle,
+		}
+		var flushRsp FlushContextResponse
+		return tpm.Execute(&flushCmd, &flushRsp)
+	}
+
+	return &sess, closer, nil
+}
+
+// Init initializes the session, just in time, if needed.
+func (s *policySession) Init(tpm Interface) error {
+	if s.handle != TPMRHNull {
+		// Session is already initialized.
+		return nil
+	}
+
+	// Get a high-quality nonceCaller for our use.
+	// Store it with the session object for later reference.
+	s.nonceCaller = TPM2BNonce{
+		Buffer: make([]byte, s.nonceSize),
+	}
+	if _, err := rand.Read(s.nonceCaller.Buffer); err != nil {
+		return err
+	}
+
+	// Start up the actual auth session.
+	sasCmd := StartAuthSessionCommand{
+		TPMKey:      s.saltHandle,
+		Bind:        s.bindHandle,
+		NonceCaller: s.nonceCaller,
+		SessionType: TPMSEPolicy,
+		Symmetric:   s.symmetric,
+		AuthHash:    s.hash,
+	}
+	var salt []byte
+	if s.saltHandle != TPMRHNull {
+		var err error
+		var encSalt *TPM2BEncryptedSecret
+		encSalt, salt, err = getEncryptedSalt(s.saltPub)
+		if err != nil {
+			return err
+		}
+		sasCmd.EncryptedSalt = *encSalt
+	}
+	var sasRsp StartAuthSessionResponse
+	if err := tpm.Execute(&sasCmd, &sasRsp); err != nil {
+		return err
+	}
+	s.handle = sasRsp.SessionHandle
+	s.nonceTPM = sasRsp.NonceTPM
+	var authSalt []byte
+	authSalt = append(authSalt, s.bindAuth...)
+	authSalt = append(authSalt, salt...)
+	// Part 1, 19.6
+	if len(authSalt) != 0 {
+		s.sessionKey = KDFA(s.hash, authSalt, []byte("ATH"), s.nonceTPM.Buffer, s.nonceCaller.Buffer, s.hash.Hash().Size())
+	}
+
+	// Call the callback to execute the session, if needed
+	if s.callback != nil {
+		if err := (*s.callback)(tpm, s.handle); err != nil {
+			return fmt.Errorf("executing policy: %w", err)
+		}
+	}
+	return nil
+}
+
+// Cleanup cleans up the session, if needed.
+func (s *policySession) CleanupFailure(tpm Interface) error {
+	// The user is already responsible to clean up this session.
+	if s.attrs.ContinueSession {
+		return nil
+	}
+	flushCmd := FlushContextCommand{
+		FlushHandle: s.handle,
+	}
+	var flushRsp FlushContextResponse
+	if err := tpm.Execute(&flushCmd, &flushRsp); err != nil {
+		return err
+	}
+	s.handle = TPMRHNull
+	return nil
+}
+
+// NonceTPM returns the last nonceTPM value from the session.
+// May be nil, if the session hasn't been initialized yet.
+func (s *policySession) NonceTPM() []byte { return s.nonceTPM.Buffer }
+
+// NewNonceCaller updates the nonceCaller for this session.
+func (s *policySession) NewNonceCaller() error {
+	_, err := rand.Read(s.nonceCaller.Buffer)
+	return err
+}
+
+// AuthorizedName returns the Name of the object being authorized.
+func (s *policySession) AuthorizedName() []byte {
+	return s.authName
+}
+
+// Computes the authorization structure for the session.
+func (s *policySession) Authorize(cc TPMCC, parms, addNonces []byte, names []byte) (*TPMSAuthCommand, error) {
+	if s.handle == TPMRHNull {
+		// Session is not initialized.
+		return nil, fmt.Errorf("session not initialized")
+	}
+	// Calculate the parameter buffer for the HMAC.
+	var parmBuf bytes.Buffer
+	binary.Write(&parmBuf, binary.BigEndian, cc)
+	parmBuf.Write(names)
+	parmBuf.Write(parms)
+
+	// Part 1, 19.6
+	// HMAC key is (sessionKey || auth) unless this session is authorizing its bind target
+	var hmacKey []byte
+	hmacKey = append(hmacKey, s.sessionKey...)
+	if !bytes.Equal(s.authName, s.bindName) && s.isAuthValueNeeded {
+		hmacKey = append(hmacKey, hmacKeyFromAuthValue(s.auth)...)
+	}
+
+	// Compute the authorization HMAC.
+	hmac, err := computeHMAC(s.hash, hmacKey, parmBuf.Bytes(),
+		s.nonceCaller.Buffer, s.nonceTPM.Buffer, addNonces, s.attrs)
+	if err != nil {
+		return nil, err
+	}
+	result := TPMSAuthCommand{
+		Handle:     s.handle,
+		Nonce:      s.nonceCaller,
+		Attributes: s.attrs,
+		Authorization: TPM2BData{
+			Buffer: hmac,
+		},
+	}
+	return &result, nil
+}
+
+// Validates the response session structure for the session.
+// Updates nonceTPM from the TPM's response.
+func (s *policySession) Validate(rc TPMRC, cc TPMCC, parms []byte, auth *TPMSAuthResponse) error {
+	// Track the new nonceTPM for the session.
+	s.nonceTPM = auth.Nonce
+	// Calculate the parameter buffer for the HMAC.
+	var parmBuf bytes.Buffer
+	binary.Write(&parmBuf, binary.BigEndian, rc)
+	binary.Write(&parmBuf, binary.BigEndian, cc)
+	parmBuf.Write(parms)
+
+	// Part 1, 19.6
+	// HMAC key is (sessionKey || auth) unless this session is authorizing its bind target
+	var hmacKey []byte
+	hmacKey = append(hmacKey, s.sessionKey...)
+	if !bytes.Equal(s.authName, s.bindName) && s.isAuthValueNeeded {
+		hmacKey = append(hmacKey, hmacKeyFromAuthValue(s.auth)...)
+	}
+
+	// Compute the authorization HMAC.
+	mac, err := computeHMAC(s.hash, hmacKey, parmBuf.Bytes(),
+		s.nonceTPM.Buffer, s.nonceCaller.Buffer, nil, auth.Attributes)
+	if err != nil {
+		return err
+	}
+	// Compare the HMAC (constant time)
+	if !hmac.Equal(mac, auth.Authorization.Buffer) {
+		return fmt.Errorf("incorrect authorization HMAC")
+	}
+	return nil
+}
+
+// IsEncryption returns true if this is an encryption session.
+func (s *policySession) IsEncryption() bool {
+	return s.attrs.Encrypt
+}
+
+// IsDecryption returns true if this is a decryption session.
+func (s *policySession) IsDecryption() bool {
+	return s.attrs.Decrypt
+}
+
+// If this session is used for parameter decryption, encrypts the
+// parameter. Otherwise, does not modify the parameter.
+func (s *policySession) Encrypt(parameter []byte) error {
+	if !s.IsDecryption() {
+		return nil
+	}
+	// Only AES-CFB is supported.
+	keyBytes := *s.symmetric.KeyBits.AES / 8
+	bits := int(keyBytes) + 16
+	var sessionValue []byte
+	sessionValue = append(sessionValue, s.sessionKey...)
+	sessionValue = append(sessionValue, s.auth...)
+	keyIV := KDFA(s.hash, sessionValue, []byte("CFB"), s.nonceCaller.Buffer, s.nonceTPM.Buffer, bits)
+	key, err := aes.NewCipher(keyIV[:keyBytes])
+	if err != nil {
+		return err
+	}
+	stream := cipher.NewCFBEncrypter(key, keyIV[keyBytes:])
+	stream.XORKeyStream(parameter, parameter)
+	return nil
+}
+
+// If this session is used for parameter encryption, encrypts the
+// parameter. Otherwise, does not modify the parameter.
+func (s *policySession) Decrypt(parameter []byte) error {
+	if !s.IsEncryption() {
+		return nil
+	}
+	// Only AES-CFB is supported.
+	keyBytes := *s.symmetric.KeyBits.AES / 8
+	bits := int(keyBytes) + 16
+	// Part 1, 21.1
+	var sessionValue []byte
+	sessionValue = append(sessionValue, s.sessionKey...)
+	sessionValue = append(sessionValue, s.auth...)
+	keyIV := KDFA(s.hash, sessionValue, []byte("CFB"), s.nonceTPM.Buffer, s.nonceCaller.Buffer, bits)
+	key, err := aes.NewCipher(keyIV[:keyBytes])
+	if err != nil {
+		return err
+	}
+	stream := cipher.NewCFBDecrypter(key, keyIV[keyBytes:])
+	stream.XORKeyStream(parameter, parameter)
+	return nil
+}
+
+// Handle returns the handle value of the session.
+// If the session is created with HMAC (instead of HMACSession) this will be TPM_RH_NULL.
+func (s *policySession) Handle() TPMHandle {
+	return s.handle
+}

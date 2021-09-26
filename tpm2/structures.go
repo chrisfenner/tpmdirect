@@ -215,6 +215,9 @@ type TPMIDHEntity = TPMHandle
 // 9.8
 type TPMISHAuthSession = TPMHandle
 
+// 9.10
+type TPMISHPolicy = TPMHandle
+
 // 9.11
 type TPMIDHContext = TPMHandle
 
