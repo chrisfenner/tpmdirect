@@ -119,6 +119,14 @@ func TestUnseal(t *testing.T) {
 		}
 	})
 
+	// Create the blob with decrypt and encrypt session bound to SRK
+	t.Run("CreateDecryptEncryptSalted", func(t *testing.T) {
+		if err := tpm.Execute(&createBlobCmd, &createBlobRsp,
+			tpm2.HMAC(tpm2.TPMAlgSHA256, 16, tpm2.Auth(createSRKRsp.Name.Buffer, srkAuth), tpm2.AESEncryption(128, tpm2.EncryptInOut), tpm2.Salted(createSRKRsp.ObjectHandle, createSRKRsp.OutPublic.PublicArea))); err != nil {
+			t.Fatalf("%v", err)
+		}
+	})
+
 	// Create the blob with a separate decrypt and encrypt session
 	t.Run("CreateDecryptEncryptSeparate", func(t *testing.T) {
 		if err := tpm.Execute(&createBlobCmd, &createBlobRsp,

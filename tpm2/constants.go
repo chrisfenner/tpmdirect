@@ -1,6 +1,7 @@
 package tpm2
 
 import (
+	"crypto/elliptic"
 	"crypto/sha1"
 	"crypto/sha256"
 	"crypto/sha512"
@@ -78,6 +79,22 @@ const (
 	TPMECCBNP638   TPMECCCurve = 0x0011
 	TPMECCSM2P256  TPMECCCurve = 0x0020
 )
+
+// Enumerate the curves in TPMECCCurve so that we can define functions on them.
+func (c TPMECCCurve) Curve() (elliptic.Curve, error) {
+	switch c {
+	case TPMECCNistP224:
+		return elliptic.P224(), nil
+	case TPMECCNistP256:
+		return elliptic.P256(), nil
+	case TPMECCNistP384:
+		return elliptic.P384(), nil
+	case TPMECCNistP521:
+		return elliptic.P521(), nil
+	default:
+		return nil, fmt.Errorf("unsupported ECC curve: %v", c)
+	}
+}
 
 // 6.5.2
 const (

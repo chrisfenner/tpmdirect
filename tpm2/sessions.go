@@ -6,6 +6,7 @@ import (
 	"crypto/cipher"
 	"crypto/hmac"
 	"crypto/rand"
+	"crypto/rsa"
 	"encoding/binary"
 	"fmt"
 )
@@ -262,11 +263,63 @@ func HMACSession(tpm Interface, hash TPMIAlgHash, nonceSize int, opts ...AuthOpt
 	return &sess, closer, nil
 }
 
+// Part 1, B.10.2
+func getEncryptedSaltRSA(nameAlg TPMIAlgHash, parms *TPMSRSAParms, pub *TPM2BPublicKeyRSA) (*TPM2BEncryptedSecret, []byte, error) {
+	rsaPub, err := rsaPub(parms, pub)
+	if err != nil {
+		return nil, nil, fmt.Errorf("could not encrypt salt to RSA key: %w", err)
+	}
+	// Odd special case: the size of the salt depends on the RSA scheme's hash alg.
+	var hAlg TPMIAlgHash
+	switch parms.Scheme.Scheme {
+	case TPMAlgRSASSA:
+		hAlg = parms.Scheme.Details.RSASSA.HashAlg
+	case TPMAlgRSAES:
+		hAlg = nameAlg
+	case TPMAlgRSAPSS:
+		hAlg = parms.Scheme.Details.RSAPSS.HashAlg
+	case TPMAlgOAEP:
+		hAlg = parms.Scheme.Details.OAEP.HashAlg
+	case TPMAlgNull:
+		hAlg = nameAlg
+	default:
+		return nil, nil, fmt.Errorf("unsupported RSA salt key scheme: %v", parms.Scheme.Scheme)
+	}
+	salt := make([]byte, hAlg.Hash().Size())
+	if _, err := rand.Read(salt); err != nil {
+		return nil, nil, fmt.Errorf("generating random salt: %w", err)
+	}
+	// Part 1, section 4.6 specifies the trailing NULL byte for the label.
+	encSalt, err := rsa.EncryptOAEP(hAlg.Hash(), rand.Reader, rsaPub, salt, []byte("SECRET\x00"))
+	if err != nil {
+		return nil, nil, fmt.Errorf("encrypting salt: %w", err)
+	}
+	return &TPM2BEncryptedSecret{
+		Buffer: encSalt,
+	}, salt, nil
+}
+
+// Part 1, 19.6.13
+func getEncryptedSaltECC(parms *TPMSECCParms, pub *TPMSECCPoint) (*TPM2BEncryptedSecret, []byte, error) {
+	_, err := eccPub(parms, pub)
+	if err != nil {
+		return nil, nil, fmt.Errorf("could not encrypt salt to RSA key: %w", err)
+	}
+	// TODO
+	return nil, nil, fmt.Errorf("TODO")
+}
+
 // getEncryptedSalt creates a salt value for salted sessions.
 // Returns the encrypted salt and plaintext salt, or an error value.
-func getEncryptedSalt(pub TPMTPublic) (TPM2BEncryptedSecret, []byte, error) {
-	// TODO:
-	return TPM2BEncryptedSecret{}, nil, fmt.Errorf("not implemented")
+func getEncryptedSalt(pub TPMTPublic) (*TPM2BEncryptedSecret, []byte, error) {
+	switch pub.Type {
+	case TPMAlgRSA:
+		return getEncryptedSaltRSA(pub.NameAlg, pub.Parameters.RSADetail, pub.Unique.RSA)
+	case TPMAlgECC:
+		return getEncryptedSaltECC(pub.Parameters.ECCDetail, pub.Unique.ECC)
+	default:
+		return nil, nil, fmt.Errorf("salt encryption alg '%v' not supported", pub.Type)
+	}
 }
 
 // Init initializes the session, just in time, if needed.
@@ -297,10 +350,12 @@ func (s *hmacSession) Init(tpm Interface) error {
 	var salt []byte
 	if s.saltHandle != TPMRHNull {
 		var err error
-		sasCmd.EncryptedSalt, salt, err = getEncryptedSalt(s.saltPub)
+		var encSalt *TPM2BEncryptedSecret
+		encSalt, salt, err = getEncryptedSalt(s.saltPub)
 		if err != nil {
 			return err
 		}
+		sasCmd.EncryptedSalt = *encSalt
 	}
 	var sasRsp StartAuthSessionResponse
 	if err := tpm.Execute(&sasCmd, &sasRsp); err != nil {
