@@ -47,7 +47,7 @@ func (t *TPM) Close() error {
 func (t *TPM) Execute(cmd tpm2.Command, rsp tpm2.Response, sess ...tpm2.Session) error {
 	cc := cmd.Command()
 	if rsp.Response() != cc {
-		panic(fmt.Sprintf("cmd and rsp must be for same command: %v != %v", cc, rsp.Response()))
+		return fmt.Errorf("cmd and rsp must be for same command: %v != %v", cc, rsp.Response())
 	}
 	hasSessions := len(sess) > 0
 	wantSessions := numAuthHandles(cmd)
@@ -129,46 +129,45 @@ func (t *TPM) Execute(cmd tpm2.Command, rsp tpm2.Response, sess ...tpm2.Session)
 
 // marshal will serialize the given values, appending them onto the given buffer.
 // Panics if any of the values are not marshallable.
-func marshal(buf *bytes.Buffer, vs ...reflect.Value) {
+func marshal(buf *bytes.Buffer, vs ...reflect.Value) error {
 	for _, v := range vs {
 		switch v.Kind() {
 		case reflect.Bool, reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64, reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-			marshalNumeric(buf, v)
+			if err := marshalNumeric(buf, v); err != nil {
+				return err
+			}
 		case reflect.Array, reflect.Slice:
-			marshalArray(buf, v)
+			if err := marshalArray(buf, v); err != nil {
+				return err
+			}
 		case reflect.Struct:
-			marshalStruct(buf, v)
+			if err := marshalStruct(buf, v); err != nil {
+				return err
+			}
 		default:
-			panic(fmt.Sprintf("not marshallable: %#v", v))
+			return fmt.Errorf("nor marshallable: %#v", v)
 		}
 	}
+	return nil
 }
 
-func marshalNumeric(buf *bytes.Buffer, v reflect.Value) {
-	if err := binary.Write(buf, binary.BigEndian, v.Interface()); err != nil {
-		panic(err)
-	}
+func marshalNumeric(buf *bytes.Buffer, v reflect.Value) error {
+	return binary.Write(buf, binary.BigEndian, v.Interface())
 }
 
-func marshalArray(buf *bytes.Buffer, v reflect.Value) {
+func marshalArray(buf *bytes.Buffer, v reflect.Value) error {
 	// binary.Write knows how to marshal slices of fixed-sized values, but not dynamic-sized values
 	// Iterate the contents and binary.Write them one at a time.
 	for i := 0; i < v.Len(); i++ {
 		if err := binary.Write(buf, binary.BigEndian, v.Index(i).Interface()); err != nil {
-			panic(fmt.Sprintf("marshalling element %d of %v: %v", i, v.Type(), err))
+			return fmt.Errorf("marshalling element %d of %v: %v", i, v.Type(), err)
 		}
 	}
+	return nil
 }
 
 // Marshals the members of the struct, handling sized and bitwise fields.
-// May panic in the following situations:
-// The struct contains a mixture of bitwise- and non-bitwise-defined fields.
-// A field in the structure indicates a non-existent (or non-numeric, <MaxInt64-valued) struct field as a tag
-// A field in the structure is both bitwise and a tagged union
-// A field in the structure is both bitwise and sized
-// A field in the structure is a tagged union that fails to marshal (see marshalUnion below)
-// A field in the structure has the "list" tag but is not a slice or array type
-func marshalStruct(buf *bytes.Buffer, v reflect.Value) {
+func marshalStruct(buf *bytes.Buffer, v reflect.Value) error {
 	// Check if this is a bitwise-defined structure. This requires all the members to be bitwise-defined.
 	if v.NumField() > 0 {
 		bitwise := hasTag(v.Type().Field(0), "bit")
@@ -176,21 +175,20 @@ func marshalStruct(buf *bytes.Buffer, v reflect.Value) {
 			thisBitwise := hasTag(v.Type().Field(i), "bit")
 			if thisBitwise {
 				if hasTag(v.Type().Field(i), "sized") {
-					panic(fmt.Sprintf("struct '%v' field '%v' is both bitwise and sized",
-						v.Type().Name(), v.Type().Field(i).Name))
+					return fmt.Errorf("struct '%v' field '%v' is both bitwise and sized",
+						v.Type().Name(), v.Type().Field(i).Name)
 				}
 				if hasTag(v.Type().Field(i), "tag") {
-					panic(fmt.Sprintf("struct '%v' field '%v' is both bitwise and a tagged union",
-						v.Type().Name(), v.Type().Field(i).Name))
+					return fmt.Errorf("struct '%v' field '%v' is both bitwise and a tagged union",
+						v.Type().Name(), v.Type().Field(i).Name)
 				}
 			}
 			if bitwise != thisBitwise {
-				panic(fmt.Sprintf("struct '%v' has mixture of bitwise and non-bitwise members", v.Type().Name()))
+				return fmt.Errorf("struct '%v' has mixture of bitwise and non-bitwise members", v.Type().Name())
 			}
 		}
 		if bitwise {
-			marshalBitwise(buf, v)
-			return
+			return marshalBitwise(buf, v)
 		}
 	}
 	// Make a pass to create a map of tag values
@@ -231,55 +229,62 @@ func marshalStruct(buf *bytes.Buffer, v reflect.Value) {
 			// Check that the tagged value was present (and numeric and smaller than MaxInt64)
 			tagValue, ok := possibleSelectors[tag]
 			if !ok {
-				panic(fmt.Sprintf("union tag '%v' for member '%v' of struct '%v' did not reference "+
+				return fmt.Errorf("union tag '%v' for member '%v' of struct '%v' did not reference "+
 					"a numeric field of int64-compatible value",
-					tag, v.Type().Field(i).Name, v.Type().Name()))
+					tag, v.Type().Field(i).Name, v.Type().Name())
 			}
-			marshalUnion(&res, v.Field(i), tagValue)
+			if err := marshalUnion(&res, v.Field(i), tagValue); err != nil {
+				return err
+			}
 		} else if v.Field(i).IsZero() && v.Field(i).Kind() == reflect.Uint32 && hasTag(v.Type().Field(i), "nullable") {
 			// Special case: Anything with the same underlying type as TPMHandle's zero value is TPM_RH_NULL.
 			// This allows callers to omit uninteresting handles instead of specifying them as TPM_RH_NULL.
-			binary.Write(&res, binary.BigEndian, uint32(tpm2.TPMRHNull))
+			if err := binary.Write(&res, binary.BigEndian, uint32(tpm2.TPMRHNull)); err != nil {
+				return err
+			}
 		} else if v.Field(i).IsZero() && v.Field(i).Kind() == reflect.Uint16 && hasTag(v.Type().Field(i), "nullable") {
 			// Special case: Anything with the same underlying type as TPMAlg's zero value is TPM_ALG_NULL.
 			// This allows callers to omit uninteresting algorithms/schemes instead of specifying them as TPM_ALG_NULL.
-			binary.Write(&res, binary.BigEndian, uint16(tpm2.TPMAlgNull))
+			if err := binary.Write(&res, binary.BigEndian, uint16(tpm2.TPMAlgNull)); err != nil {
+				return err
+			}
 		} else {
-			marshal(&res, v.Field(i))
+			if err := marshal(&res, v.Field(i)); err != nil {
+				return err
+			}
 		}
 		if sized {
-			binary.Write(buf, binary.BigEndian, uint16(res.Len()))
+			if err := binary.Write(buf, binary.BigEndian, uint16(res.Len())); err != nil {
+				return err
+			}
 		}
 		buf.Write(res.Bytes())
 	}
+	return nil
 }
 
 // Marshals a bitwise-defined struct.
-// May panic in the following situations:
-// Not all bits are assigned to a field
-// The highest bit index is not a multiple of 8, minus 1
-// A field has a range-based selector that is not highest-bit first
-// The bits assigned to a field are more than the size of the field's type
-// Members of a field are anything other than Uint type values
-func marshalBitwise(buf *bytes.Buffer, v reflect.Value) {
+func marshalBitwise(buf *bytes.Buffer, v reflect.Value) error {
 	maxBit := 0
 	for i := 0; i < v.NumField(); i++ {
 		high, _, ok := rangeTag(v.Type().Field(i), "bit")
 		if !ok {
-			panic(fmt.Sprintf("'%v' struct member '%v' did not specify a bit index or range", v.Type().Name(), v.Type().Field(i).Name))
+			return fmt.Errorf("'%v' struct member '%v' did not specify a bit index or range", v.Type().Name(), v.Type().Field(i).Name)
 		}
 		if high > maxBit {
 			maxBit = high
 		}
 	}
 	if (maxBit+1)%8 != 0 {
-		panic(fmt.Sprintf("'%v' bitwise members did not total up to a multiple of 8 bits", v.Type().Name()))
+		return fmt.Errorf("'%v' bitwise members did not total up to a multiple of 8 bits", v.Type().Name())
 	}
 	bitArray := make([]bool, maxBit+1)
 	for i := 0; i < v.NumField(); i++ {
 		high, low, _ := rangeTag(v.Type().Field(i), "bit")
 		var buf bytes.Buffer
-		marshal(&buf, v.Field(i))
+		if err := marshal(&buf, v.Field(i)); err != nil {
+			return err
+		}
 		b := buf.Bytes()
 		for i := 0; i <= (high - low); i++ {
 			bitArray[low+i] = ((b[len(b)-i/8-1] >> (i % 8)) & 1) == 1
@@ -292,40 +297,34 @@ func marshalBitwise(buf *bytes.Buffer, v reflect.Value) {
 		}
 	}
 	buf.Write(result)
+	return nil
 }
 
 // Marshals the member of the given union struct corresponding to the given selector.
 // Marshals nothing if the selector is equal to TPM_ALG_NULL (0x0010)
-// May panic in the following situations:
-// The passed-in value is not a union struct (i.e., a structure of all pointer members with selector tags)
-// The passed-in selector value is not handled in any case in the union
-// The selected value in the passed-in struct is nil
-func marshalUnion(buf *bytes.Buffer, v reflect.Value, selector int64) {
+func marshalUnion(buf *bytes.Buffer, v reflect.Value, selector int64) error {
 	// Special case: TPM_ALG_NULL as a selector means marshal nothing
 	if selector == int64(tpm2.TPMAlgNull) {
-		return
+		return nil
 	}
 	for i := 0; i < v.NumField(); i++ {
 		sel, ok := numericTag(v.Type().Field(i), "selector")
 		if !ok {
-			panic(fmt.Sprintf("'%v' union member '%v' did not have a selector tag", v.Type().Name(), v.Type().Field(i).Name))
+			return fmt.Errorf("'%v' union member '%v' did not have a selector tag", v.Type().Name(), v.Type().Field(i).Name)
 		}
 		if sel == selector {
 			if v.Field(i).IsNil() {
 				// Special case: if the selected value is found but nil, marshal the zero-value instead
-				marshal(buf, reflect.New(v.Field(i).Type().Elem()).Elem())
-			} else {
-				marshal(buf, v.Field(i).Elem())
+				return marshal(buf, reflect.New(v.Field(i).Type().Elem()).Elem())
 			}
-			return
+			return marshal(buf, v.Field(i).Elem())
 		}
 	}
-	panic(fmt.Sprintf("selector value '%v' not handled for type '%v'", selector, v.Type().Name()))
+	return fmt.Errorf("selector value '%v' not handled for type '%v'", selector, v.Type().Name())
 }
 
 // unmarshal will deserialize the given values from the given buffer.
 // Returns an error if the buffer does not contain enough data to satisfy the type.
-// panics if a non-settable value is passed, or the values are not marshallable types.
 func unmarshal(buf *bytes.Buffer, vs ...reflect.Value) error {
 	for _, v := range vs {
 		switch v.Kind() {
@@ -365,7 +364,7 @@ func unmarshal(buf *bytes.Buffer, vs ...reflect.Value) error {
 			}
 			continue
 		default:
-			panic(fmt.Sprintf("not unmarshallable: %v", v.Type()))
+			return fmt.Errorf("not unmarshallable: %v", v.Type())
 		}
 	}
 	return nil
@@ -393,16 +392,16 @@ func unmarshalStruct(buf *bytes.Buffer, v reflect.Value) error {
 			thisBitwise := hasTag(v.Type().Field(i), "bit")
 			if thisBitwise {
 				if hasTag(v.Type().Field(i), "sized") {
-					panic(fmt.Sprintf("struct '%v' field '%v' is both bitwise and sized",
-						v.Type().Name(), v.Type().Field(i).Name))
+					return fmt.Errorf("struct '%v' field '%v' is both bitwise and sized",
+						v.Type().Name(), v.Type().Field(i).Name)
 				}
 				if hasTag(v.Type().Field(i), "tag") {
-					panic(fmt.Sprintf("struct '%v' field '%v' is both bitwise and a tagged union",
-						v.Type().Name(), v.Type().Field(i).Name))
+					return fmt.Errorf("struct '%v' field '%v' is both bitwise and a tagged union",
+						v.Type().Name(), v.Type().Field(i).Name)
 				}
 			}
 			if bitwise != thisBitwise {
-				panic(fmt.Sprintf("struct '%v' has mixture of bitwise and non-bitwise members", v.Type().Name()))
+				return fmt.Errorf("struct '%v' has mixture of bitwise and non-bitwise members", v.Type().Name())
 			}
 		}
 		if bitwise {
@@ -415,13 +414,13 @@ func unmarshalStruct(buf *bytes.Buffer, v reflect.Value) error {
 		}
 		list := hasTag(v.Type().Field(i), "list")
 		if list && (v.Field(i).Kind() != reflect.Slice) {
-			panic(fmt.Sprintf("field '%v' of struct '%v' had the 'list' tag but was not a slice",
-				v.Type().Field(i).Name, v.Type().Name()))
+			return fmt.Errorf("field '%v' of struct '%v' had the 'list' tag but was not a slice",
+				v.Type().Field(i).Name, v.Type().Name())
 		}
 		// Slices of anything but byte/uint8 must have the 'list' tag.
 		if !list && (v.Field(i).Kind() == reflect.Slice) && (v.Type().Field(i).Type.Elem().Kind() != reflect.Uint8) {
-			panic(fmt.Sprintf("field '%v' of struct '%v' was a slice of non-byte but did not have the 'list' tag",
-				v.Type().Field(i).Name, v.Type().Name()))
+			return fmt.Errorf("field '%v' of struct '%v' was a slice of non-byte but did not have the 'list' tag",
+				v.Type().Field(i).Name, v.Type().Name())
 		}
 		sized := hasTag(v.Type().Field(i), "sized")
 		var expectedSize uint16
@@ -460,9 +459,9 @@ func unmarshalStruct(buf *bytes.Buffer, v reflect.Value) error {
 			// Check that the tagged value was present (and numeric and smaller than MaxInt64)
 			tagValue, ok := possibleSelectors[tag]
 			if !ok {
-				panic(fmt.Sprintf("union tag '%v' for member '%v' of struct '%v' did not reference "+
+				return fmt.Errorf("union tag '%v' for member '%v' of struct '%v' did not reference "+
 					"a numeric field of in64-compatible value",
-					tag, v.Type().Field(i).Name, v.Type().Name()))
+					tag, v.Type().Field(i).Name, v.Type().Name())
 			}
 			if err := unmarshalUnion(bufToReadFrom, v.Field(i), tagValue); err != nil {
 				return fmt.Errorf("unmarshalling field %v of struct of type '%v', %w", i, v.Type(), err)
@@ -483,25 +482,19 @@ func unmarshalStruct(buf *bytes.Buffer, v reflect.Value) error {
 }
 
 // Unmarshals a bitwise-defined struct.
-// May panic in the following situations:
-// Not all bits are assigned to a field
-// The highest bit index is not a multiple of 8, minus 1
-// A field has a range-based selector that is not highest-bit first
-// The bits assigned to a field are more than the size of the field's type
-// Members of a field are anything other than Uint or bool type values
 func unmarshalBitwise(buf *bytes.Buffer, v reflect.Value) error {
 	maxBit := 0
 	for i := 0; i < v.NumField(); i++ {
 		high, _, ok := rangeTag(v.Type().Field(i), "bit")
 		if !ok {
-			panic(fmt.Sprintf("'%v' struct member '%v' did not specify a bit index or range", v.Type().Name(), v.Type().Field(i).Name))
+			return fmt.Errorf("'%v' struct member '%v' did not specify a bit index or range", v.Type().Name(), v.Type().Field(i).Name)
 		}
 		if high > maxBit {
 			maxBit = high
 		}
 	}
 	if (maxBit+1)%8 != 0 {
-		panic(fmt.Sprintf("'%v' bitwise members did not total up to a multiple of 8 bits", v.Type().Name()))
+		return fmt.Errorf("'%v' bitwise members did not total up to a multiple of 8 bits", v.Type().Name())
 	}
 	bitArray := make([]bool, maxBit+1)
 	// We will read big-endian, starting from the last byte and working our way down.
@@ -534,10 +527,6 @@ func unmarshalBitwise(buf *bytes.Buffer, v reflect.Value) error {
 
 // Unmarshals the member of the given union struct corresponding to the given selector.
 // Unmarshals nothing if the selector is TPM_ALG_NULL (0x0010)
-// May panic in the following situations:
-// The passed-in value is not a union struct (i.e., a structure of all pointer members with selector tags)
-// The passed-in selector value is not handled in any case in the union
-// The selected value in the passed-in struct is nil
 func unmarshalUnion(buf *bytes.Buffer, v reflect.Value, selector int64) error {
 	// Special case: TPM_ALG_NULL as a selector means unmarshal nothing
 	if selector == int64(tpm2.TPMAlgNull) {
@@ -546,7 +535,7 @@ func unmarshalUnion(buf *bytes.Buffer, v reflect.Value, selector int64) error {
 	for i := 0; i < v.NumField(); i++ {
 		sel, ok := numericTag(v.Type().Field(i), "selector")
 		if !ok {
-			panic(fmt.Sprintf("'%v' union member '%v' did not have a selector tag", v.Type().Name(), v.Type().Field(i).Name))
+			return fmt.Errorf("'%v' union member '%v' did not have a selector tag", v.Type().Name(), v.Type().Field(i).Name)
 		}
 		if sel == selector {
 			val := reflect.New(v.Type().Field(i).Type.Elem())
@@ -557,7 +546,7 @@ func unmarshalUnion(buf *bytes.Buffer, v reflect.Value, selector int64) error {
 			return nil
 		}
 	}
-	panic(fmt.Sprintf("selector value '%v' not handled for type '%v'", selector, v.Type().Name()))
+	return fmt.Errorf("selector value '%v' not handled for type '%v'", selector, v.Type().Name())
 }
 
 // Returns all the tpmdirect tags on a field as a map.
@@ -597,7 +586,6 @@ func hasTag(t reflect.StructField, tag string) bool {
 }
 
 // Returns the numeric tag value, or false if the tag is not present.
-// Panics if the value is found, but not numeric.
 func numericTag(t reflect.StructField, tag string) (int64, bool) {
 	val, ok := tags(t)[tag]
 	if !ok {
@@ -605,36 +593,32 @@ func numericTag(t reflect.StructField, tag string) (int64, bool) {
 	}
 	v, err := strconv.ParseInt(val, 0, 64)
 	if err != nil {
-		panic(fmt.Sprintf("expected numeric int64 tag value for '%v', got '%v', tag, val", tag, val))
+		return 0, false
 	}
 	return v, true
 }
 
 // Returns the range on a tag like 4:3 or 4.
 // If there is no colon, the low and high part of the range are equal.
-// Panics if the first value is not greater than the second value, or there is more than one colon
 func rangeTag(t reflect.StructField, tag string) (int, int, bool) {
 	val, ok := tags(t)[tag]
 	if !ok {
 		return 0, 0, false
 	}
 	vals := strings.Split(val, ":")
-	if len(vals) > 2 {
-		panic(fmt.Sprintf("tag value '%v' contained too many colons", val))
-	}
 	high, err := strconv.Atoi(vals[0])
 	if err != nil {
-		panic(fmt.Sprintf("tag value '%v' contained non-numeric range value", val))
+		return 0, 0, false
 	}
 	low := high
 	if len(vals) > 1 {
 		low, err = strconv.Atoi(vals[1])
 		if err != nil {
-			panic(fmt.Sprintf("tag value '%v' contained non-numeric range value", val))
+			return 0, 0, false
 		}
 	}
 	if low > high {
-		panic(fmt.Sprintf("tag value '%v' specified range in order low-to-high", val))
+		low, high = high, low
 	}
 	return high, low, true
 }
