@@ -99,7 +99,7 @@ func (t *TPM) Execute(cmd tpm2.Command, rsp tpm2.Response, sess ...tpm2.Session)
 			}
 		}
 		if len(bonusErrs) != 0 {
-			return fmt.Errorf("%w - additional errors encountered during cleanup: %v", strings.Join(bonusErrs, ", "))
+			return fmt.Errorf("%w - additional errors encountered during cleanup: %v", err, strings.Join(bonusErrs, ", "))
 		}
 		return err
 	}
