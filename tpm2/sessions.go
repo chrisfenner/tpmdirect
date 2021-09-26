@@ -201,23 +201,15 @@ func AuditExclusive() AuthOption {
 
 // hmacSession generally implements the HMAC session.
 type hmacSession struct {
+	sessionOptions
 	hash       TPMIAlgHash
 	nonceSize  int
 	handle     TPMHandle
-	auth       []byte
-	authName   []byte
-	bindHandle TPMIDHEntity
-	bindName   []byte
-	bindAuth   []byte
-	saltHandle TPMIDHObject
-	saltPub    TPMTPublic
 	sessionKey []byte
-	attrs      TPMASession
 	// last nonceCaller
 	nonceCaller TPM2BNonce
 	// last nonceTPM
-	nonceTPM  TPM2BNonce
-	symmetric TPMTSymDef
+	nonceTPM TPM2BNonce
 }
 
 // HMAC sets up a just-in-time HMAC session that is used only once.
@@ -225,24 +217,14 @@ type hmacSession struct {
 func HMAC(hash TPMIAlgHash, nonceSize int, opts ...AuthOption) Session {
 	// Set up a one-off session that knows the auth value.
 	sess := hmacSession{
-		hash:      hash,
-		nonceSize: nonceSize,
-		handle:    TPMRHNull,
+		sessionOptions: defaultOptions(),
+		hash:           hash,
+		nonceSize:      nonceSize,
+		handle:         TPMRHNull,
 	}
-	// Start with the default options, then apply any that were provided.
-	o := defaultOptions()
 	for _, opt := range opts {
-		opt(&o)
+		opt(&sess.sessionOptions)
 	}
-	sess.auth = o.auth
-	sess.authName = o.authName
-	sess.symmetric = o.symmetric
-	sess.bindHandle = o.bindHandle
-	sess.bindName = o.bindName
-	sess.bindAuth = o.bindAuth
-	sess.saltHandle = o.saltHandle
-	sess.saltPub = o.saltPub
-	sess.attrs = o.attrs
 	return &sess
 }
 
@@ -250,26 +232,16 @@ func HMAC(hash TPMIAlgHash, nonceSize int, opts ...AuthOption) Session {
 func HMACSession(tpm Interface, hash TPMIAlgHash, nonceSize int, opts ...AuthOption) (s Session, close func() error, err error) {
 	// Set up a not-one-off session that knows the auth value.
 	sess := hmacSession{
-		hash:      hash,
-		nonceSize: nonceSize,
-		handle:    TPMRHNull,
+		sessionOptions: defaultOptions(),
+		hash:           hash,
+		nonceSize:      nonceSize,
+		handle:         TPMRHNull,
 	}
-	// Start with the default options, then apply any that were provided.
-	o := defaultOptions()
 	for _, opt := range opts {
-		opt(&o)
+		opt(&sess.sessionOptions)
 	}
-	sess.auth = o.auth
-	sess.authName = o.authName
-	sess.symmetric = o.symmetric
-	sess.bindHandle = o.bindHandle
-	sess.bindName = o.bindName
-	sess.bindAuth = o.bindAuth
-	sess.saltHandle = o.saltHandle
-	sess.saltPub = o.saltPub
-	sess.attrs = o.attrs
 	// This session is reusable and is closed with the function we'll return.
-	sess.attrs.ContinueSession = true
+	sess.sessionOptions.attrs.ContinueSession = true
 
 	// Initialize the session.
 	if err := sess.Init(tpm); err != nil {
