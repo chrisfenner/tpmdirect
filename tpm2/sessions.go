@@ -93,6 +93,10 @@ func (s *pwSession) Encrypt(parameter []byte) error { return nil }
 // Password sessions can't be used for encryption.
 func (s *pwSession) Decrypt(parameter []byte) error { return nil }
 
+// Handle returns the handle value associated with this session.
+// In the case of a password session, this is always TPM_RS_PW.
+func (s *pwSession) Handle() TPMHandle { return TPMRSPW }
+
 // sessionOptions represents extra options used when setting up a session.
 type sessionOptions struct {
 	auth       []byte
@@ -173,6 +177,25 @@ func AESEncryption(keySize TPMKeyBits, dir parameterEncryptionDirection) AuthOpt
 				AES: NewTPMAlgID(TPMAlgCFB),
 			},
 		}
+	}
+}
+
+// Audit uses the session to compute extra HMACs.
+// An Audit session can be used with GetSessionAuditDigest to obtain attestation
+// over a sequence of commands.
+func Audit() AuthOption {
+	return func(o *sessionOptions) {
+		o.attrs.Audit = true
+	}
+}
+
+// AuditExclusive is like an audit session, but even more powerful.
+// This allows an audit session to additionally indicate that no other auditable
+// commands were executed other than the ones described by the audit hash.
+func AuditExclusive() AuthOption {
+	return func(o *sessionOptions) {
+		o.attrs.Audit = true
+		o.attrs.AuditExclusive = true
 	}
 }
 
@@ -611,4 +634,10 @@ func (s *hmacSession) Decrypt(parameter []byte) error {
 	stream := cipher.NewCFBDecrypter(key, keyIV[keyBytes:])
 	stream.XORKeyStream(parameter, parameter)
 	return nil
+}
+
+// Handle returns the handle value of the session.
+// If the session is created with HMAC (instead of HMACSession) this will be TPM_RH_NULL.
+func (s *hmacSession) Handle() TPMHandle {
+	return s.handle
 }

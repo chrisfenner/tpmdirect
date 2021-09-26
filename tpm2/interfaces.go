@@ -50,6 +50,8 @@ type Session interface {
 	// If this session is used for parameter encryption, encrypts the
 	// parameter. Otherwise, does not modify the parameter.
 	Decrypt(parameter []byte) error
+	// Returns the handle value of this session.
+	Handle() TPMHandle
 }
 
 // Interface represents a logical connection to a TPM.
