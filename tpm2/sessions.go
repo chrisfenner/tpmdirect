@@ -93,10 +93,15 @@ func (s *pwSession) Decrypt(parameter []byte) error { return nil }
 
 // sessionOptions represents extra options used when setting up a session.
 type sessionOptions struct {
-	auth      []byte
-	authName  []byte
-	attrs     TPMASession
-	symmetric TPMTSymDef
+	auth       []byte
+	authName   []byte
+	bindHandle TPMIDHEntity
+	bindName   []byte
+	bindAuth   []byte
+	saltHandle TPMIDHObject
+	saltPub    TPMTPublic
+	attrs      TPMASession
+	symmetric  TPMTSymDef
 }
 
 // defaultOptions represents the default options used when none are provided.
@@ -105,6 +110,8 @@ func defaultOptions() sessionOptions {
 		symmetric: TPMTSymDef{
 			Algorithm: TPMAlgNull,
 		},
+		bindHandle: TPMRHNull,
+		saltHandle: TPMRHNull,
 	}
 }
 
@@ -116,6 +123,25 @@ func Auth(name, auth []byte) AuthOption {
 	return func(o *sessionOptions) {
 		o.authName = name
 		o.auth = auth
+	}
+}
+
+// Auth specifies that this session's session key should depend on the auth
+// value of the given object.
+func Bound(handle TPMIDHEntity, name, auth []byte) AuthOption {
+	return func(o *sessionOptions) {
+		o.bindHandle = handle
+		o.bindName = name
+		o.bindAuth = auth
+	}
+}
+
+// Salted specifies that this session's session key should depend on an
+// encrypted seed value using the given public key.
+func Salted(handle TPMIDHObject, pub TPMTPublic) AuthOption {
+	return func(o *sessionOptions) {
+		o.saltHandle = handle
+		o.saltPub = pub
 	}
 }
 
@@ -150,12 +176,18 @@ func AESEncryption(keySize TPMKeyBits, dir parameterEncryptionDirection) AuthOpt
 
 // hmacSession generally implements the HMAC session.
 type hmacSession struct {
-	hash      TPMIAlgHash
-	nonceSize int
-	handle    TPMHandle
-	auth      []byte
-	authName  []byte
-	attrs     TPMASession
+	hash       TPMIAlgHash
+	nonceSize  int
+	handle     TPMHandle
+	auth       []byte
+	authName   []byte
+	bindHandle TPMIDHEntity
+	bindName   []byte
+	bindAuth   []byte
+	saltHandle TPMIDHObject
+	saltPub    TPMTPublic
+	sessionKey []byte
+	attrs      TPMASession
 	// last nonceCaller
 	nonceCaller TPM2BNonce
 	// last nonceTPM
@@ -180,6 +212,11 @@ func HMAC(hash TPMIAlgHash, nonceSize int, opts ...AuthOption) Session {
 	sess.auth = o.auth
 	sess.authName = o.authName
 	sess.symmetric = o.symmetric
+	sess.bindHandle = o.bindHandle
+	sess.bindName = o.bindName
+	sess.bindAuth = o.bindAuth
+	sess.saltHandle = o.saltHandle
+	sess.saltPub = o.saltPub
 	sess.attrs = o.attrs
 	return &sess
 }
@@ -200,6 +237,11 @@ func HMACSession(tpm Interface, hash TPMIAlgHash, nonceSize int, opts ...AuthOpt
 	sess.auth = o.auth
 	sess.authName = o.authName
 	sess.symmetric = o.symmetric
+	sess.bindHandle = o.bindHandle
+	sess.bindName = o.bindName
+	sess.bindAuth = o.bindAuth
+	sess.saltHandle = o.saltHandle
+	sess.saltPub = o.saltPub
 	sess.attrs = o.attrs
 	// This session is reusable and is closed with the function we'll return.
 	sess.attrs.ContinueSession = true
@@ -220,6 +262,13 @@ func HMACSession(tpm Interface, hash TPMIAlgHash, nonceSize int, opts ...AuthOpt
 	return &sess, closer, nil
 }
 
+// getEncryptedSalt creates a salt value for salted sessions.
+// Returns the encrypted salt and plaintext salt, or an error value.
+func getEncryptedSalt(pub TPMTPublic) (TPM2BEncryptedSecret, []byte, error) {
+	// TODO:
+	return TPM2BEncryptedSecret{}, nil, fmt.Errorf("not implemented")
+}
+
 // Init initializes the session, just in time, if needed.
 func (s *hmacSession) Init(tpm Interface) error {
 	if s.handle != TPMRHNull {
@@ -238,12 +287,20 @@ func (s *hmacSession) Init(tpm Interface) error {
 
 	// Start up the actual auth session.
 	sasCmd := StartAuthSessionCommand{
-		TPMKey:      TPMRHNull,
-		Bind:        TPMRHNull,
+		TPMKey:      s.saltHandle,
+		Bind:        s.bindHandle,
 		NonceCaller: s.nonceCaller,
 		SessionType: TPMSEHMAC,
 		Symmetric:   s.symmetric,
 		AuthHash:    s.hash,
+	}
+	var salt []byte
+	if s.saltHandle != TPMRHNull {
+		var err error
+		sasCmd.EncryptedSalt, salt, err = getEncryptedSalt(s.saltPub)
+		if err != nil {
+			return err
+		}
 	}
 	var sasRsp StartAuthSessionResponse
 	if err := tpm.Execute(&sasCmd, &sasRsp); err != nil {
@@ -251,6 +308,13 @@ func (s *hmacSession) Init(tpm Interface) error {
 	}
 	s.handle = sasRsp.SessionHandle
 	s.nonceTPM = sasRsp.NonceTPM
+	var authSalt []byte
+	authSalt = append(authSalt, s.bindAuth...)
+	authSalt = append(authSalt, salt...)
+	// Part 1, 19.6
+	if len(authSalt) != 0 {
+		s.sessionKey = KDFA(s.hash, authSalt, []byte("ATH"), s.nonceTPM.Buffer, s.nonceCaller.Buffer, s.hash.Hash().Size())
+	}
 	return nil
 }
 
@@ -364,9 +428,16 @@ func (s *hmacSession) Authorize(cc TPMCC, parms, addNonces []byte, names []byte)
 	parmBuf.Write(names)
 	parmBuf.Write(parms)
 
-	key := hmacKeyFromAuthValue(s.auth)
+	// Part 1, 19.6
+	// HMAC key is (sessionKey || auth) unless this session is authorizing its bind target
+	var hmacKey []byte
+	hmacKey = append(hmacKey, s.sessionKey...)
+	if !bytes.Equal(s.authName, s.bindName) {
+		hmacKey = append(hmacKey, hmacKeyFromAuthValue(s.auth)...)
+	}
+
 	// Compute the authorization HMAC.
-	hmac, err := computeHMAC(s.hash, key, parmBuf.Bytes(),
+	hmac, err := computeHMAC(s.hash, hmacKey, parmBuf.Bytes(),
 		s.nonceCaller.Buffer, s.nonceTPM.Buffer, addNonces, s.attrs)
 	if err != nil {
 		return nil, err
@@ -393,9 +464,16 @@ func (s *hmacSession) Validate(rc TPMRC, cc TPMCC, parms []byte, auth *TPMSAuthR
 	binary.Write(&parmBuf, binary.BigEndian, cc)
 	parmBuf.Write(parms)
 
-	key := hmacKeyFromAuthValue(s.auth)
+	// Part 1, 19.6
+	// HMAC key is (sessionKey || auth) unless this session is authorizing its bind target
+	var hmacKey []byte
+	hmacKey = append(hmacKey, s.sessionKey...)
+	if !bytes.Equal(s.authName, s.bindName) {
+		hmacKey = append(hmacKey, hmacKeyFromAuthValue(s.auth)...)
+	}
+
 	// Compute the authorization HMAC.
-	mac, err := computeHMAC(s.hash, key, parmBuf.Bytes(),
+	mac, err := computeHMAC(s.hash, hmacKey, parmBuf.Bytes(),
 		s.nonceTPM.Buffer, s.nonceCaller.Buffer, nil, auth.Attributes)
 	if err != nil {
 		return err
@@ -426,7 +504,10 @@ func (s *hmacSession) Encrypt(parameter []byte) error {
 	// Only AES-CFB is supported.
 	keyBytes := *s.symmetric.KeyBits.AES / 8
 	bits := int(keyBytes) + 16
-	keyIV := KDFA(s.hash, s.auth, []byte("CFB"), s.nonceCaller.Buffer, s.nonceTPM.Buffer, bits)
+	var sessionValue []byte
+	sessionValue = append(sessionValue, s.sessionKey...)
+	sessionValue = append(sessionValue, s.auth...)
+	keyIV := KDFA(s.hash, sessionValue, []byte("CFB"), s.nonceCaller.Buffer, s.nonceTPM.Buffer, bits)
 	key, err := aes.NewCipher(keyIV[:keyBytes])
 	if err != nil {
 		return err
@@ -445,7 +526,11 @@ func (s *hmacSession) Decrypt(parameter []byte) error {
 	// Only AES-CFB is supported.
 	keyBytes := *s.symmetric.KeyBits.AES / 8
 	bits := int(keyBytes) + 16
-	keyIV := KDFA(s.hash, s.auth, []byte("CFB"), s.nonceTPM.Buffer, s.nonceCaller.Buffer, bits)
+	// Part 1, 21.1
+	var sessionValue []byte
+	sessionValue = append(sessionValue, s.sessionKey...)
+	sessionValue = append(sessionValue, s.auth...)
+	keyIV := KDFA(s.hash, sessionValue, []byte("CFB"), s.nonceTPM.Buffer, s.nonceCaller.Buffer, bits)
 	key, err := aes.NewCipher(keyIV[:keyBytes])
 	if err != nil {
 		return err
