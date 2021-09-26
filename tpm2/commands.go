@@ -25,10 +25,10 @@ type Response interface {
 type StartAuthSessionCommand struct {
 	// handle of a loaded decrypt key used to encrypt salt
 	// may be TPM_RH_NULL
-	TPMKey TPMIDHObject `tpmdirect:"handle"`
+	TPMKey TPMIDHObject `tpmdirect:"handle,nullable"`
 	// entity providing the authValue
 	// may be TPM_RH_NULL
-	Bind TPMIDHEntity `tpmdirect:"handle"`
+	Bind TPMIDHEntity `tpmdirect:"handle,nullable"`
 	// initial nonceCaller, sets nonceTPM size for the session
 	// shall be at least 16 octets
 	NonceCaller TPM2BNonce

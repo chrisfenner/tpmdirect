@@ -65,13 +65,6 @@ func TestSealUnseal(t *testing.T) {
 					UserWithAuth: true,
 					NoDA:         true,
 				},
-				Parameters: tpm2.TPMUPublicParms{
-					KeyedHashDetail: &tpm2.TPMSKeyedHashParms{
-						Scheme: tpm2.TPMTKeyedHashScheme{
-							Scheme: tpm2.TPMAlgNull,
-						},
-					},
-				},
 			},
 		},
 	}
@@ -200,13 +193,6 @@ func TestSealUnsealSecure(t *testing.T) {
 					FixedParent:  true,
 					UserWithAuth: true,
 					NoDA:         true,
-				},
-				Parameters: tpm2.TPMUPublicParms{
-					KeyedHashDetail: &tpm2.TPMSKeyedHashParms{
-						Scheme: tpm2.TPMTKeyedHashScheme{
-							Scheme: tpm2.TPMAlgNull,
-						},
-					},
 				},
 			},
 		},

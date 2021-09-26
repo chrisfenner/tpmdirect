@@ -329,7 +329,7 @@ type TPMUSymDetails struct {
 // 11.1.6
 type TPMTSymDef struct {
 	// indicates a symmetric algorithm
-	Algorithm TPMIAlgSym
+	Algorithm TPMIAlgSym `tpmdirect:"nullable"`
 	// the key size
 	KeyBits TPMUSymKeyBits `tpmdirect:"tag=Algorithm"`
 	// the mode for the key
@@ -343,7 +343,7 @@ type TPMTSymDefObject struct {
 	// selects a symmetric block cipher
 	// When used in the parameter area of a parent object, this shall
 	// be a supported block cipher and not TPM_ALG_NULL
-	Algorithm TPMIAlgSymObject
+	Algorithm TPMIAlgSymObject `tpmdirect:"nullable"`
 	// the key size
 	KeyBits TPMUSymKeyBits `tpmdirect:"tag=Algorithm"`
 	// default mode
@@ -405,8 +405,8 @@ type TPMUSchemeKeyedHash struct {
 
 // 11.1.23
 type TPMTKeyedHashScheme struct {
-	Scheme  TPMIAlgKeyedHashScheme
-	Details TPMUSchemeKeyedHash `tpmdirect:"tag=Scheme"`
+	Scheme  TPMIAlgKeyedHashScheme `tpmdirect:"nullable"`
+	Details TPMUSchemeKeyedHash    `tpmdirect:"tag=Scheme"`
 }
 
 // 11.2.1.2
@@ -442,7 +442,7 @@ type TPMUKDFScheme struct {
 // 11.2.3.3
 type TPMTKDFScheme struct {
 	// scheme selector
-	Scheme TPMIAlgKDF
+	Scheme TPMIAlgKDF `tpmdirect:"nullable"`
 	// scheme parameters
 	Details TPMUKDFScheme `tpmdirect:"tag=Scheme"`
 }
@@ -464,7 +464,7 @@ type TPMIAlgRSAScheme = TPMAlgID
 // 11.2.4.2
 type TPMTRSAScheme struct {
 	// scheme selector
-	Scheme TPMIAlgRSAScheme
+	Scheme TPMIAlgRSAScheme `tpmdirect:"nullable"`
 	// scheme parameters
 	Details TPMUAsymScheme `tpmdirect:"tag=Scheme"`
 }
@@ -495,7 +495,7 @@ type TPMIECCCurve = TPMECCCurve
 // 11.2.5.6
 type TPMTECCScheme struct {
 	// scheme selector
-	Scheme TPMIAlgECCScheme
+	Scheme TPMIAlgECCScheme `tpmdirect:"nullable"`
 	// scheme parameters
 	Details TPMUAsymScheme `tpmdirect:"tag=Scheme"`
 }

@@ -197,6 +197,12 @@ func marshalStruct(buf *bytes.Buffer, v reflect.Value) {
 	// UInt64-valued fields with values greater than MaxInt64 cannot be selectors.
 	possibleSelectors := make(map[string]int64)
 	for i := 0; i < v.NumField(); i++ {
+		// Special case: Treat a zero-valued nullable field as TPMAlgNull for union selection.
+		// This allows callers to omit uninteresting scheme structures.
+		if v.Field(i).IsZero() && hasTag(v.Type().Field(i), "nullable") {
+			possibleSelectors[v.Type().Field(i).Name] = int64(tpm2.TPMAlgNull)
+			continue
+		}
 		switch v.Field(i).Kind() {
 		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 			possibleSelectors[v.Type().Field(i).Name] = v.Field(i).Int()
@@ -226,10 +232,18 @@ func marshalStruct(buf *bytes.Buffer, v reflect.Value) {
 			tagValue, ok := possibleSelectors[tag]
 			if !ok {
 				panic(fmt.Sprintf("union tag '%v' for member '%v' of struct '%v' did not reference "+
-					"a numeric field of in64-compatible value",
+					"a numeric field of int64-compatible value",
 					tag, v.Type().Field(i).Name, v.Type().Name()))
 			}
 			marshalUnion(&res, v.Field(i), tagValue)
+		} else if v.Field(i).IsZero() && v.Field(i).Kind() == reflect.Uint32 && hasTag(v.Type().Field(i), "nullable") {
+			// Special case: Anything with the same underlying type as TPMHandle's zero value is TPM_RH_NULL.
+			// This allows callers to omit uninteresting handles instead of specifying them as TPM_RH_NULL.
+			binary.Write(&res, binary.BigEndian, uint32(tpm2.TPMRHNull))
+		} else if v.Field(i).IsZero() && v.Field(i).Kind() == reflect.Uint16 && hasTag(v.Type().Field(i), "nullable") {
+			// Special case: Anything with the same underlying type as TPMAlg's zero value is TPM_ALG_NULL.
+			// This allows callers to omit uninteresting algorithms/schemes instead of specifying them as TPM_ALG_NULL.
+			binary.Write(&res, binary.BigEndian, uint16(tpm2.TPMAlgNull))
 		} else {
 			marshal(&res, v.Field(i))
 		}

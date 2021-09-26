@@ -30,9 +30,6 @@ var (
 							AES: NewTPMAlgID(TPMAlgCFB),
 						},
 					},
-					Scheme: TPMTRSAScheme{
-						Scheme: TPMAlgNull,
-					},
 					KeyBits: 2048,
 				},
 			},
@@ -71,13 +68,7 @@ var (
 							AES: NewTPMAlgID(TPMAlgCFB),
 						},
 					},
-					Scheme: TPMTECCScheme{
-						Scheme: TPMAlgNull,
-					},
 					CurveID: TPMECCNistP256,
-					KDF: TPMTKDFScheme{
-						Scheme: TPMAlgNull,
-					},
 				},
 			},
 			Unique: TPMUPublicID{

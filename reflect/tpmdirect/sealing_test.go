@@ -89,13 +89,6 @@ func unsealingTest(t *testing.T, srkTemplate tpm2.TPM2BPublic) {
 					UserWithAuth: true,
 					NoDA:         true,
 				},
-				Parameters: tpm2.TPMUPublicParms{
-					KeyedHashDetail: &tpm2.TPMSKeyedHashParms{
-						Scheme: tpm2.TPMTKeyedHashScheme{
-							Scheme: tpm2.TPMAlgNull,
-						},
-					},
-				},
 			},
 		},
 	}
