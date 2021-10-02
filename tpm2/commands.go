@@ -178,6 +178,34 @@ type UnsealResponse struct {
 
 func (_ *UnsealResponse) Response() TPMCC { return TPMCCUnseal }
 
+// 23.4
+type PolicySecretCommand struct {
+	// handle for an entity providing the authorization
+	AuthHandle AuthHandle `tpmdirect:"handle,auth"`
+	// handle for the policy session being extended
+	PolicySession TPMISHPolicy `tpmdirect:"handle"`
+	// the policy nonce for the session
+	NonceTPM TPM2BNonce
+	// digest of the command parameters to which this authorization is limited
+	CPHashA TPM2BDigest
+	// a reference to a policy relating to the authorization – may be the Empty Buffer
+	PolicyRef TPM2BNonce
+	// time when authorization will expire, measured in seconds from the time
+	// that nonceTPM was generated
+	Expiration int32
+}
+
+func (_ *PolicySecretCommand) Command() TPMCC { return TPMCCPolicySecret }
+
+type PolicySecretResponse struct {
+	// implementation-specific time value used to indicate to the TPM when the ticket expires
+	Timeout TPM2BTimeout
+	// produced if the command succeeds and expiration in the command was non-zero
+	PolicyTicket TPMTTKAuth
+}
+
+func (_ *PolicySecretResponse) Response() TPMCC { return TPMCCPolicySecret }
+
 // 24.1
 type CreatePrimaryCommand struct {
 	// TPM_RH_ENDORSEMENT, TPM_RH_OWNER, TPM_RH_PLATFORM+{PP},

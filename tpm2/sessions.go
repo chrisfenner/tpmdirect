@@ -368,11 +368,11 @@ func (s *hmacSession) Init(tpm Interface) error {
 	}
 	s.handle = sasRsp.SessionHandle
 	s.nonceTPM = sasRsp.NonceTPM
-	var authSalt []byte
-	authSalt = append(authSalt, s.bindAuth...)
-	authSalt = append(authSalt, salt...)
 	// Part 1, 19.6
-	if len(authSalt) != 0 {
+	if s.bindHandle != TPMRHNull || len(salt) != 0 {
+		var authSalt []byte
+		authSalt = append(authSalt, s.bindAuth...)
+		authSalt = append(authSalt, salt...)
 		s.sessionKey = KDFA(s.hash, authSalt, []byte("ATH"), s.nonceTPM.Buffer, s.nonceCaller.Buffer, s.hash.Hash().Size())
 	}
 	return nil
@@ -517,6 +517,10 @@ func (s *hmacSession) Authorize(cc TPMCC, parms, addNonces []byte, names []TPM2B
 func (s *hmacSession) Validate(rc TPMRC, cc TPMCC, parms []byte, names []TPM2BName, authIndex int, auth *TPMSAuthResponse) error {
 	// Track the new nonceTPM for the session.
 	s.nonceTPM = auth.Nonce
+	// Track the session being automatically flushed.
+	if !auth.Attributes.ContinueSession {
+		s.handle = TPMRHNull
+	}
 	// Calculate the parameter buffer for the HMAC.
 	var parmBuf bytes.Buffer
 	binary.Write(&parmBuf, binary.BigEndian, rc)
@@ -540,9 +544,6 @@ func (s *hmacSession) Validate(rc TPMRC, cc TPMCC, parms []byte, names []TPM2BNa
 	// Compare the HMAC (constant time)
 	if !hmac.Equal(mac, auth.Authorization.Buffer) {
 		return fmt.Errorf("incorrect authorization HMAC")
-	}
-	if !auth.Attributes.ContinueSession {
-		s.handle = TPMRHNull
 	}
 	return nil
 }
@@ -616,7 +617,7 @@ func (s *hmacSession) Handle() TPMHandle {
 // pw is true if 'auth' must be passed in cleartext as indicated by PolicyPassword
 // (false otherwise or if 'auth' is nil);
 // and err is any error executing the policy.
-type PolicyCallback = func(tpm Interface, handle TPMISHPolicy) (auth []byte, pw bool, err error)
+type PolicyCallback = func(tpm Interface, handle TPMISHPolicy, nonceTPM TPM2BNonce) (auth []byte, pw bool, err error)
 
 // policySession generally implements the policy session.
 type policySession struct {
@@ -728,18 +729,18 @@ func (s *policySession) Init(tpm Interface) error {
 	}
 	s.handle = sasRsp.SessionHandle
 	s.nonceTPM = sasRsp.NonceTPM
-	var authSalt []byte
-	authSalt = append(authSalt, s.bindAuth...)
-	authSalt = append(authSalt, salt...)
 	// Part 1, 19.6
-	if len(authSalt) != 0 {
+	if s.bindHandle != TPMRHNull || len(salt) != 0 {
+		var authSalt []byte
+		authSalt = append(authSalt, s.bindAuth...)
+		authSalt = append(authSalt, salt...)
 		s.sessionKey = KDFA(s.hash, authSalt, []byte("ATH"), s.nonceTPM.Buffer, s.nonceCaller.Buffer, s.hash.Hash().Size())
 	}
 
 	// Call the callback to execute the policy, if needed
 	if s.callback != nil {
 		var err error
-		s.callbackAuth, s.callbackPW, err = (*s.callback)(tpm, s.handle)
+		s.callbackAuth, s.callbackPW, err = (*s.callback)(tpm, s.handle, s.nonceTPM)
 		if err != nil {
 			return fmt.Errorf("executing policy: %w", err)
 		}
@@ -825,6 +826,10 @@ func (s *policySession) Authorize(cc TPMCC, parms, addNonces []byte, names []TPM
 func (s *policySession) Validate(rc TPMRC, cc TPMCC, parms []byte, _ []TPM2BName, _ int, auth *TPMSAuthResponse) error {
 	// Track the new nonceTPM for the session.
 	s.nonceTPM = auth.Nonce
+	// Track the session being automatically flushed.
+	if !auth.Attributes.ContinueSession {
+		s.handle = TPMRHNull
+	}
 	// Calculate the parameter buffer for the HMAC.
 	var parmBuf bytes.Buffer
 	binary.Write(&parmBuf, binary.BigEndian, rc)

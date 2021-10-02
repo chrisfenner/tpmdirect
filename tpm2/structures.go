@@ -260,6 +260,9 @@ type TPM2BData struct {
 // 10.4.4
 type TPM2BNonce TPM2BDigest
 
+// 10.4.10
+type TPM2BTimeout TPM2BData
+
 // 10.4.5
 type TPM2BAuth TPM2BDigest
 
@@ -280,6 +283,16 @@ type TPMTTKCreation struct {
 	// ticket structure tag
 	Tag TPMST
 	// the hierarchy containing name
+	Hierarchy TPMIRHHierarchy
+	// This shall be the HMAC produced using a proof value of hierarchy.
+	Digest TPM2BDigest
+}
+
+// 10.7.5
+type TPMTTKAuth struct {
+	// ticket structure tag
+	Tag TPMST
+	// the hierarchy of the object used to produce the ticket
 	Hierarchy TPMIRHHierarchy
 	// This shall be the HMAC produced using a proof value of hierarchy.
 	Digest TPM2BDigest
