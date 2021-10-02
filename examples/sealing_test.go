@@ -20,12 +20,11 @@ func TestSealUnseal(t *testing.T) {
 
 	// Create the SRK
 	createSRKCmd := tpm2.CreatePrimaryCommand{
-		PrimaryHandle: tpm2.TPMRHOwner,
+		PrimaryHandle: tpm2.AuthHandle{Handle: tpm2.TPMRHOwner},
 		InPublic:      tpm2.ECCSRKTemplate,
 	}
 	var createSRKRsp tpm2.CreatePrimaryResponse
-	if err := tpm.Execute(&createSRKCmd, &createSRKRsp,
-		tpm2.PasswordAuth(tpm2.PrimaryHandleName(tpm2.TPMRHOwner), nil)); err != nil {
+	if err := tpm.Execute(&createSRKCmd, &createSRKRsp); err != nil {
 		t.Fatalf("%v", err)
 	}
 	t.Logf("SRK name: %x", createSRKRsp.Name)
@@ -44,7 +43,10 @@ func TestSealUnseal(t *testing.T) {
 	data := []byte("secrets")
 	auth := []byte("p@ssw0rd")
 	createBlobCmd := tpm2.CreateCommand{
-		ParentHandle: createSRKRsp.ObjectHandle,
+		ParentHandle: tpm2.AuthHandle{
+			Handle: createSRKRsp.ObjectHandle,
+			Name:   createSRKRsp.Name,
+		},
 		InSensitive: tpm2.TPM2BSensitiveCreate{
 			Sensitive: tpm2.TPMSSensitiveCreate{
 				UserAuth: tpm2.TPM2BAuth{
@@ -72,21 +74,22 @@ func TestSealUnseal(t *testing.T) {
 
 	// Create the blob
 	t.Run("Create", func(t *testing.T) {
-		if err := tpm.Execute(&createBlobCmd, &createBlobRsp,
-			tpm2.PasswordAuth(createSRKRsp.Name.Buffer, nil)); err != nil {
+		if err := tpm.Execute(&createBlobCmd, &createBlobRsp); err != nil {
 			t.Fatalf("%v", err)
 		}
 	})
 
 	// Load the sealed blob
 	loadBlobCmd := tpm2.LoadCommand{
-		ParentHandle: createSRKRsp.ObjectHandle,
-		InPrivate:    createBlobRsp.OutPrivate,
-		InPublic:     createBlobRsp.OutPublic,
+		ParentHandle: tpm2.AuthHandle{
+			Handle: createSRKRsp.ObjectHandle,
+			Name:   createSRKRsp.Name,
+		},
+		InPrivate: createBlobRsp.OutPrivate,
+		InPublic:  createBlobRsp.OutPublic,
 	}
 	var loadBlobRsp tpm2.LoadResponse
-	if err := tpm.Execute(&loadBlobCmd, &loadBlobRsp,
-		tpm2.PasswordAuth(createSRKRsp.Name.Buffer, nil)); err != nil {
+	if err := tpm.Execute(&loadBlobCmd, &loadBlobRsp); err != nil {
 		t.Fatalf("%v", err)
 	}
 	defer func() {
@@ -102,12 +105,15 @@ func TestSealUnseal(t *testing.T) {
 
 	// Unseal the blob
 	unsealCmd := tpm2.UnsealCommand{
-		ItemHandle: loadBlobRsp.ObjectHandle,
+		ItemHandle: tpm2.AuthHandle{
+			Handle: loadBlobRsp.ObjectHandle,
+			Name:   loadBlobRsp.Name,
+		},
 	}
 	var unsealRsp tpm2.UnsealResponse
 	t.Run("WithPassword", func(t *testing.T) {
-		if err := tpm.Execute(&unsealCmd, &unsealRsp,
-			tpm2.PasswordAuth(loadBlobRsp.Name.Buffer, auth)); err != nil {
+		unsealCmd.ItemHandle.Auth = tpm2.PasswordAuth(auth)
+		if err := tpm.Execute(&unsealCmd, &unsealRsp); err != nil {
 			t.Errorf("%v", err)
 		}
 		if !bytes.Equal(unsealRsp.OutData.Buffer, data) {
@@ -115,10 +121,10 @@ func TestSealUnseal(t *testing.T) {
 		}
 	})
 
-	// Unseal the blob with an incorrect password session
+	// Unseal the blob with an incorrect password session and check the error
 	t.Run("WithWrongPassword", func(t *testing.T) {
-		err := tpm.Execute(&unsealCmd, &unsealRsp,
-			tpm2.PasswordAuth(loadBlobRsp.Name.Buffer, []byte("NotThePassword")))
+		unsealCmd.ItemHandle.Auth = tpm2.PasswordAuth([]byte("NotThePassword"))
+		err := tpm.Execute(&unsealCmd, &unsealRsp)
 		if err == nil {
 			t.Errorf("want TPM_RC_BAD_AUTH, got nil")
 		}
@@ -145,12 +151,11 @@ func TestSealUnsealSecure(t *testing.T) {
 
 	// Create the SRK
 	createSRKCmd := tpm2.CreatePrimaryCommand{
-		PrimaryHandle: tpm2.TPMRHOwner,
+		PrimaryHandle: tpm2.AuthHandle{Handle: tpm2.TPMRHOwner},
 		InPublic:      tpm2.ECCSRKTemplate,
 	}
 	var createSRKRsp tpm2.CreatePrimaryResponse
-	if err := tpm.Execute(&createSRKCmd, &createSRKRsp,
-		tpm2.PasswordAuth(tpm2.PrimaryHandleName(tpm2.TPMRHOwner), nil)); err != nil {
+	if err := tpm.Execute(&createSRKCmd, &createSRKRsp); err != nil {
 		t.Fatalf("%v", err)
 	}
 	defer func() {
@@ -173,7 +178,10 @@ func TestSealUnsealSecure(t *testing.T) {
 	data := []byte("secrets")
 	auth := []byte("p@ssw0rd")
 	createBlobCmd := tpm2.CreateCommand{
-		ParentHandle: createSRKRsp.ObjectHandle,
+		ParentHandle: tpm2.AuthHandle{
+			Handle: createSRKRsp.ObjectHandle,
+			Name:   createSRKRsp.Name,
+		},
 		InSensitive: tpm2.TPM2BSensitiveCreate{
 			Sensitive: tpm2.TPMSSensitiveCreate{
 				UserAuth: tpm2.TPM2BAuth{
@@ -200,13 +208,10 @@ func TestSealUnsealSecure(t *testing.T) {
 	var createBlobRsp tpm2.CreateResponse
 
 	// Create the blob
-	// In a single session, authorize the use of the SRK (which has no auth value),
-	//   encrypt the sealed data+auth with a session key, and
-	//   encrypt a salt value with the SRK to derive the session key.
+	// Use an extra session for confidentiality of data going into the TPM.
 	t.Run("Create", func(t *testing.T) {
 		if err := tpm.Execute(&createBlobCmd, &createBlobRsp,
 			tpm2.HMAC(tpm2.TPMAlgSHA256, 16,
-				tpm2.Auth(createSRKRsp.Name.Buffer, nil),
 				tpm2.AESEncryption(128, tpm2.EncryptIn),
 				tpm2.Salted(srkHandle, srkPublic))); err != nil {
 			t.Fatalf("%v", err)
@@ -217,13 +222,15 @@ func TestSealUnsealSecure(t *testing.T) {
 	// The blob contents are protected by the TPM and don't need extra protection
 	// by us, here.
 	loadBlobCmd := tpm2.LoadCommand{
-		ParentHandle: createSRKRsp.ObjectHandle,
-		InPrivate:    createBlobRsp.OutPrivate,
-		InPublic:     createBlobRsp.OutPublic,
+		ParentHandle: tpm2.AuthHandle{
+			Handle: createSRKRsp.ObjectHandle,
+			Name:   createSRKRsp.Name,
+		},
+		InPrivate: createBlobRsp.OutPrivate,
+		InPublic:  createBlobRsp.OutPublic,
 	}
 	var loadBlobRsp tpm2.LoadResponse
-	if err := tpm.Execute(&loadBlobCmd, &loadBlobRsp,
-		tpm2.PasswordAuth(createSRKRsp.Name.Buffer, nil)); err != nil {
+	if err := tpm.Execute(&loadBlobCmd, &loadBlobRsp); err != nil {
 		t.Fatalf("%v", err)
 	}
 	defer func() {
@@ -238,44 +245,24 @@ func TestSealUnsealSecure(t *testing.T) {
 	}()
 
 	// Unseal the blob
-	// In a single session, authorize the use of the blob (with its low-entropy auth value),
-	//   encrypt the unsealed data with a session key, and
-	//   encrypt a salt value with the SRK to derive the session key.
+	// Use an extra session for confidentiality of data coming out of the TPM.
 	unsealCmd := tpm2.UnsealCommand{
-		ItemHandle: loadBlobRsp.ObjectHandle,
+		ItemHandle: tpm2.AuthHandle{
+			Handle: loadBlobRsp.ObjectHandle,
+			Name:   loadBlobRsp.Name,
+			Auth:   tpm2.HMAC(tpm2.TPMAlgSHA256, 16, tpm2.Auth(auth)),
+		},
 	}
 	var unsealRsp tpm2.UnsealResponse
 	t.Run("WithAuth", func(t *testing.T) {
 		if err := tpm.Execute(&unsealCmd, &unsealRsp,
 			tpm2.HMAC(tpm2.TPMAlgSHA256, 16,
-				tpm2.Auth(loadBlobRsp.Name.Buffer, auth),
 				tpm2.AESEncryption(128, tpm2.EncryptOut),
 				tpm2.Salted(srkHandle, srkPublic))); err != nil {
 			t.Errorf("%v", err)
 		}
 		if !bytes.Equal(unsealRsp.OutData.Buffer, data) {
 			t.Errorf("want %x got %x", data, unsealRsp.OutData.Buffer)
-		}
-	})
-
-	// Unseal the blob with an incorrect auth
-	t.Run("WithWrongAuth", func(t *testing.T) {
-		err := tpm.Execute(&unsealCmd, &unsealRsp,
-			tpm2.HMAC(tpm2.TPMAlgSHA256, 16,
-				tpm2.Auth(loadBlobRsp.Name.Buffer, []byte("NotTheAuth")),
-				tpm2.AESEncryption(128, tpm2.EncryptOut),
-				tpm2.Salted(srkHandle, srkPublic)))
-		if err == nil {
-			t.Errorf("want TPM_RC_BAD_AUTH, got nil")
-		}
-		if !errors.Is(err, tpm2.TPMRCBadAuth) {
-			t.Errorf("want TPM_RC_BAD_AUTH, got %v", err)
-		}
-		var fmt1 tpm2.Fmt1Error
-		if !errors.As(err, &fmt1) {
-			t.Errorf("want a Fmt1Error, got %v", err)
-		} else if isSession, session := fmt1.Session(); !isSession || session != 1 {
-			t.Errorf("want TPM_RC_BAD_AUTH on session 1, got %v", err)
 		}
 	})
 }

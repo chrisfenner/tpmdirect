@@ -1,8 +1,62 @@
 package tpm2
 
+import "encoding/binary"
+
 const (
 	CommandCodeCreate uint32 = 0x00000153
 )
+
+// Convenience type to wrap an authorized handle.
+type AuthHandle struct {
+	// The handle that is authorized.
+	// If zero, treated as TPM_RH_NULL.
+	Handle TPMIDHObject `tpmdirect:"nullable"`
+	// The Name of the object expected at the given handle value.
+	// If Name contains a nil buffer, the effective Name will be
+	// the big-endian UINT32 representation of Handle, as in
+	// Part 1, section 16 "Names" for PCRs, sessions, and
+	// permanent values.
+	Name TPM2BName `tpmdirect:"skip"`
+	// The session used to authorize the object.
+	// If the 'UserWithAuth' attribute is not set on the object,
+	// must be a Policy session.
+	// For ADMIN-role commands, if 'AdminWithPolicy' is set on
+	// the object, must be a Policy session.
+	// For DUP-role commands, must be a Policy session that
+	// sets the policy command code to TPM_CC_DUPLICATE.
+	// If nil, the effective Session will be a password session
+	// with NULL authorization.
+	Auth Session `tpmdirect:"skip"`
+}
+
+// EffectiveHandle returns the effective handle value.
+// Returns TPM_RH_NULL if unset.
+func (a *AuthHandle) EffectiveHandle() TPMIDHObject {
+	if a.Handle != 0 {
+		return a.Handle
+	}
+	return TPMRHNull
+}
+
+// EffectiveName returns the effective Name.
+// Returns the handle value as a name if unset.
+func (a *AuthHandle) EffectiveName() TPM2BName {
+	if len(a.Name.Buffer) > 0 {
+		return a.Name
+	}
+	buf := make([]byte, 4)
+	binary.BigEndian.PutUint32(buf, uint32(a.EffectiveHandle()))
+	return TPM2BName{buf}
+}
+
+// EffectiveAuth returns the effective auth session.
+// Returns a NULL password session if unset.
+func (a *AuthHandle) EffectiveAuth() Session {
+	if a.Auth == nil {
+		return PasswordAuth(nil)
+	}
+	return a.Auth
+}
 
 // Dummy interface for TPM command structures so that they can be
 // easily distinguished from other types of structures.
@@ -59,7 +113,7 @@ func (_ *StartAuthSessionResponse) Response() TPMCC { return TPMCCStartAuthSessi
 // 12.1
 type CreateCommand struct {
 	// handle of parent for new object
-	ParentHandle TPMIDHObject `tpmdirect:"handle,auth"`
+	ParentHandle AuthHandle `tpmdirect:"handle,auth"`
 	// the sensitive data
 	InSensitive TPM2BSensitiveCreate
 	// the public template
@@ -93,7 +147,7 @@ func (_ *CreateResponse) Response() TPMCC { return TPMCCCreate }
 // 12.2
 type LoadCommand struct {
 	// handle of parent for new object
-	ParentHandle TPMIDHObject `tpmdirect:"handle,auth"`
+	ParentHandle AuthHandle `tpmdirect:"handle,auth"`
 	// the private portion of the object
 	InPrivate TPM2BPrivate
 	// the public portion of the object
@@ -113,7 +167,7 @@ func (_ *LoadResponse) Response() TPMCC { return TPMCCLoad }
 
 // 12.7
 type UnsealCommand struct {
-	ItemHandle TPMIDHObject `tpmdirect:"handle,auth"`
+	ItemHandle AuthHandle `tpmdirect:"handle,auth"`
 }
 
 func (_ *UnsealCommand) Command() TPMCC { return TPMCCUnseal }
@@ -128,7 +182,7 @@ func (_ *UnsealResponse) Response() TPMCC { return TPMCCUnseal }
 type CreatePrimaryCommand struct {
 	// TPM_RH_ENDORSEMENT, TPM_RH_OWNER, TPM_RH_PLATFORM+{PP},
 	// or TPM_RH_NULL
-	PrimaryHandle TPMIDHObject `tpmdirect:"handle,auth"`
+	PrimaryHandle AuthHandle `tpmdirect:"handle,auth"`
 	// the sensitive data
 	InSensitive TPM2BSensitiveCreate
 	// the public template

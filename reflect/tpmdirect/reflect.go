@@ -44,17 +44,22 @@ func (t *TPM) Close() error {
 }
 
 // Execute sends the provided command and returns the provided response.
-func (t *TPM) Execute(cmd tpm2.Command, rsp tpm2.Response, sess ...tpm2.Session) error {
+func (t *TPM) Execute(cmd tpm2.Command, rsp tpm2.Response, extraSess ...tpm2.Session) error {
 	cc := cmd.Command()
 	if rsp.Response() != cc {
 		return fmt.Errorf("cmd and rsp must be for same command: %v != %v", cc, rsp.Response())
 	}
+	sess, err := cmdAuths(cmd)
+	if err != nil {
+		return err
+	}
 	hasSessions := len(sess) > 0
 	wantSessions := numAuthHandles(cmd)
-	if len(sess) < wantSessions {
-		return fmt.Errorf("not enough sessions: command '%v' needs %d or more authorization sessions",
-			reflect.TypeOf(cmd), wantSessions)
+	if len(sess) != wantSessions {
+		return fmt.Errorf("command '%v' needs %d authorization sessions, got %d",
+			reflect.TypeOf(cmd), wantSessions, len(sess))
 	}
+	sess = append(sess, extraSess...)
 	if len(sess) > 3 {
 		return fmt.Errorf("too many sessions: %v", len(sess))
 	}
@@ -68,11 +73,15 @@ func (t *TPM) Execute(cmd tpm2.Command, rsp tpm2.Response, sess ...tpm2.Session)
 		}
 	}
 	handles := cmdHandles(cmd)
+	names, err := cmdNames(cmd)
+	if err != nil {
+		return err
+	}
 	parms, err := cmdParameters(cmd, sess)
 	if err != nil {
 		return err
 	}
-	sessions, err := cmdSessions(t, sess, cc, parms)
+	sessions, err := cmdSessions(t, sess, cc, names, parms)
 	if err != nil {
 		return err
 	}
@@ -114,7 +123,7 @@ func (t *TPM) Execute(cmd tpm2.Command, rsp tpm2.Response, sess ...tpm2.Session)
 	if hasSessions {
 		// We don't need the TPM RC here because we would have errored out from rspHeader
 		// TODO: Authenticate the error code with sessions, if desired.
-		err = rspSessions(rspBuf, tpm2.TPMRCSuccess, cc, rspParms, sess)
+		err = rspSessions(rspBuf, tpm2.TPMRCSuccess, cc, names, rspParms, sess)
 		if err != nil {
 			return err
 		}
@@ -642,6 +651,22 @@ func taggedMembers(v reflect.Value, tag string, invert bool) []reflect.Value {
 	return result
 }
 
+// cmdAuths returns the authorization sessions of the command.
+func cmdAuths(cmd tpm2.Command) ([]tpm2.Session, error) {
+	authHandles := taggedMembers(reflect.ValueOf(cmd).Elem(), "auth", false)
+	var result []tpm2.Session
+	for _, authHandle := range authHandles {
+		handle, ok := authHandle.Interface().(tpm2.AuthHandle)
+		if !ok {
+			return nil, fmt.Errorf("'auth'-tagged member of %v was of type %v instead of tpm2.AuthHandle",
+				reflect.TypeOf(cmd), authHandle.Type())
+		}
+		result = append(result, handle.EffectiveAuth())
+	}
+
+	return result, nil
+}
+
 // numAuthHandles returns the number of authorization sessions needed for the command.
 func numAuthHandles(cmd tpm2.Command) int {
 	result := 0
@@ -664,6 +689,22 @@ func cmdHandles(cmd tpm2.Command) []byte {
 	marshal(result, handles...)
 
 	return result.Bytes()
+}
+
+// cmdNames returns the authorized names of the command.
+func cmdNames(cmd tpm2.Command) ([]tpm2.TPM2BName, error) {
+	authHandles := taggedMembers(reflect.ValueOf(cmd).Elem(), "auth", false)
+	var result []tpm2.TPM2BName
+	for _, authHandle := range authHandles {
+		handle, ok := authHandle.Interface().(tpm2.AuthHandle)
+		if !ok {
+			return nil, fmt.Errorf("'auth'-tagged member of %v was of type %v instead of tpm2.AuthHandle",
+				reflect.TypeOf(cmd), authHandle.Type())
+		}
+		result = append(result, handle.EffectiveName())
+	}
+
+	return result, nil
 }
 
 // cmdParameters returns the parameters area of the command.
@@ -706,7 +747,7 @@ func cmdParameters(cmd tpm2.Command, sess []tpm2.Session) ([]byte, error) {
 }
 
 // cmdSessions returns the authorization area of the command.
-func cmdSessions(tpm *TPM, sess []tpm2.Session, cc tpm2.TPMCC, parms []byte) ([]byte, error) {
+func cmdSessions(tpm *TPM, sess []tpm2.Session, cc tpm2.TPMCC, names []tpm2.TPM2BName, parms []byte) ([]byte, error) {
 	// There is no authorization area if there are no sessions.
 	if len(sess) == 0 {
 		return nil, nil
@@ -735,11 +776,6 @@ func cmdSessions(tpm *TPM, sess []tpm2.Session, cc tpm2.TPMCC, parms []byte) ([]
 			}
 		}
 	}
-	// Find all the names being authorized by this command.
-	var names []byte
-	for _, s := range sess {
-		names = append(names, s.AuthorizedName()...)
-	}
 
 	buf := bytes.NewBuffer(make([]byte, 0, 1024))
 	// Skip space to write the size later
@@ -753,7 +789,7 @@ func cmdSessions(tpm *TPM, sess []tpm2.Session, cc tpm2.TPMCC, parms []byte) ([]
 			addNonces = append(addNonces, decNonceTPM...)
 			addNonces = append(addNonces, encNonceTPM...)
 		}
-		auth, err := s.Authorize(cc, parms, addNonces, names)
+		auth, err := s.Authorize(cc, parms, addNonces, names, i)
 		if err != nil {
 			return nil, fmt.Errorf("session %d: %w", i, err)
 		}
@@ -846,13 +882,13 @@ func rspParametersArea(hasSessions bool, rsp *bytes.Buffer) ([]byte, error) {
 // the sessions with it. If there is a response validation error, returns
 // an error here.
 // rsp is updated to point to the rest of the response after the sessions.
-func rspSessions(rsp *bytes.Buffer, rc tpm2.TPMRC, cc tpm2.TPMCC, parms []byte, sess []tpm2.Session) error {
+func rspSessions(rsp *bytes.Buffer, rc tpm2.TPMRC, cc tpm2.TPMCC, names []tpm2.TPM2BName, parms []byte, sess []tpm2.Session) error {
 	for i, s := range sess {
 		var auth tpm2.TPMSAuthResponse
 		if err := unmarshal(rsp, reflect.ValueOf(&auth).Elem()); err != nil {
 			return fmt.Errorf("reading auth session %d: %w", i, err)
 		}
-		if err := s.Validate(rc, cc, parms, &auth); err != nil {
+		if err := s.Validate(rc, cc, parms, names, i, &auth); err != nil {
 			return fmt.Errorf("validating auth session %d: %w", i, err)
 		}
 	}
