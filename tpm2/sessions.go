@@ -90,9 +90,10 @@ func (s *pwSession) Decrypt(parameter []byte) error { return nil }
 // In the case of a password session, this is always TPM_RS_PW.
 func (s *pwSession) Handle() TPMHandle { return TPMRSPW }
 
-// sessionOptions represents extra options used when setting up a session.
+// sessionOptions represents extra options used when setting up an HMAC or policy session.
 type sessionOptions struct {
 	auth       []byte
+	password   bool
 	bindHandle TPMIDHEntity
 	bindName   TPM2BName
 	bindAuth   []byte
@@ -120,6 +121,17 @@ type AuthOption func(*sessionOptions)
 func Auth(auth []byte) AuthOption {
 	return func(o *sessionOptions) {
 		o.auth = auth
+	}
+}
+
+// Password is a policy-session-only option that specifies to provide the
+// object's auth value in place of the authorization HMAC when authorizing.
+// Deprecated: This is not recommended and is only provided for completeness; use Auth instead.
+// For HMAC sessions, has the same effect as using Auth.
+func Password(auth []byte) AuthOption {
+	return func(o *sessionOptions) {
+		o.auth = auth
+		o.password = true
 	}
 }
 
@@ -610,14 +622,8 @@ func (s *hmacSession) Handle() TPMHandle {
 }
 
 // PolicyCallback represents an object's policy in the form of a function.
-// This function makes zero or more TPM policy commands and returns the tuple:
-// auth, pw, err
-// where 'auth' is the auth value of the object as required by
-// PolicyAuthValue/PolicyPassword (or nil if neither of those are used):
-// pw is true if 'auth' must be passed in cleartext as indicated by PolicyPassword
-// (false otherwise or if 'auth' is nil);
-// and err is any error executing the policy.
-type PolicyCallback = func(tpm Interface, handle TPMISHPolicy, nonceTPM TPM2BNonce) (auth []byte, pw bool, err error)
+// This function makes zero or more TPM policy commands and returns error.
+type PolicyCallback = func(tpm Interface, handle TPMISHPolicy, nonceTPM TPM2BNonce) error
 
 // policySession generally implements the policy session.
 type policySession struct {
@@ -631,12 +637,6 @@ type policySession struct {
 	// last nonceTPM
 	nonceTPM TPM2BNonce
 	callback *PolicyCallback
-	// The 'auth' value from the callback.
-	// Cached between command and response for validation.
-	callbackAuth []byte
-	// The 'pw' value from the callback.
-	// Cached between command and response for validation.
-	callbackPW bool
 }
 
 // Policy sets up a just-in-time policy session that is used only once.
@@ -739,9 +739,7 @@ func (s *policySession) Init(tpm Interface) error {
 
 	// Call the callback to execute the policy, if needed
 	if s.callback != nil {
-		var err error
-		s.callbackAuth, s.callbackPW, err = (*s.callback)(tpm, s.handle, s.nonceTPM)
-		if err != nil {
+		if err := (*s.callback)(tpm, s.handle, s.nonceTPM); err != nil {
 			return fmt.Errorf("executing policy: %w", err)
 		}
 	}
@@ -792,14 +790,14 @@ func (s *policySession) Authorize(cc TPMCC, parms, addNonces []byte, names []TPM
 	parmBuf.Write(parms)
 
 	var hmac []byte
-	if s.callbackPW {
-		hmac = s.callbackAuth
+	if s.password {
+		hmac = s.auth
 	} else {
 		// Part 1, 19.6
 		// HMAC key is (sessionKey || auth).
 		var hmacKey []byte
 		hmacKey = append(hmacKey, s.sessionKey...)
-		hmacKey = append(hmacKey, hmacKeyFromAuthValue(s.callbackAuth)...)
+		hmacKey = append(hmacKey, hmacKeyFromAuthValue(s.auth)...)
 
 		// Compute the authorization HMAC.
 		var err error
@@ -836,7 +834,7 @@ func (s *policySession) Validate(rc TPMRC, cc TPMCC, parms []byte, _ []TPM2BName
 	binary.Write(&parmBuf, binary.BigEndian, cc)
 	parmBuf.Write(parms)
 
-	if s.callbackPW {
+	if s.password {
 		// If we used a password, expect no nonce and no response HMAC.
 		if len(auth.Nonce.Buffer) != 0 {
 			return fmt.Errorf("expected empty nonce in response auth to PW policy, got %x", auth.Nonce)
@@ -849,7 +847,7 @@ func (s *policySession) Validate(rc TPMRC, cc TPMCC, parms []byte, _ []TPM2BName
 		// HMAC key is (sessionKey || auth).
 		var hmacKey []byte
 		hmacKey = append(hmacKey, s.sessionKey...)
-		hmacKey = append(hmacKey, hmacKeyFromAuthValue(s.callbackAuth)...)
+		hmacKey = append(hmacKey, hmacKeyFromAuthValue(s.auth)...)
 		// Compute the authorization HMAC.
 		mac, err := computeHMAC(s.hash, hmacKey, parmBuf.Bytes(),
 			s.nonceTPM.Buffer, s.nonceCaller.Buffer, nil, auth.Attributes)

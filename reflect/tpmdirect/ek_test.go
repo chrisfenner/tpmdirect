@@ -22,15 +22,14 @@ func TestEKPolicy(t *testing.T) {
 	}
 }
 
-func ekPolicy(tpm tpm2.Interface, handle tpm2.TPMISHPolicy, nonceTPM tpm2.TPM2BNonce) ([]byte, bool, error) {
+func ekPolicy(tpm tpm2.Interface, handle tpm2.TPMISHPolicy, nonceTPM tpm2.TPM2BNonce) error {
 	cmd := tpm2.PolicySecretCommand{
 		AuthHandle:    tpm2.AuthHandle{Handle: tpm2.TPMRHEndorsement},
 		PolicySession: handle,
 		NonceTPM:      nonceTPM,
 	}
 	rsp := tpm2.PolicySecretResponse{}
-	err := tpm.Execute(&cmd, &rsp)
-	return nil, false, err
+	return tpm.Execute(&cmd, &rsp)
 }
 
 func ekTest(t *testing.T, ekTemplate tpm2.TPM2BPublic) {
