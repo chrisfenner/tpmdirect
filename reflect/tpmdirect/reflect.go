@@ -762,7 +762,7 @@ func cmdSessions(tpm *TPM, sess []tpm2.Session, cc tpm2.TPMCC, names []tpm2.TPM2
 					// Only one encrypt session is permitted.
 					return nil, fmt.Errorf("too many encrypt sessions")
 				}
-				encNonceTPM = s.NonceTPM()
+				encNonceTPM = s.NonceTPM().Buffer
 				// A session used for both encryption and decryption only
 				// needs its nonce counted once.
 				continue
@@ -772,7 +772,7 @@ func cmdSessions(tpm *TPM, sess []tpm2.Session, cc tpm2.TPMCC, names []tpm2.TPM2
 					// Only one decrypt session is permitted.
 					return nil, fmt.Errorf("too many decrypt sessions")
 				}
-				decNonceTPM = s.NonceTPM()
+				decNonceTPM = s.NonceTPM().Buffer
 			}
 		}
 	}

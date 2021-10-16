@@ -33,7 +33,7 @@ func (s *pwSession) CleanupFailure(tpm Interface) error { return nil }
 // NonceTPM normally returns the last nonceTPM value from the session.
 // Since a password session is a pseudo-session with the auth value stuffed
 // in where the HMAC should go, this is not used.
-func (s *pwSession) NonceTPM() []byte { return nil }
+func (s *pwSession) NonceTPM() TPM2BNonce { return TPM2BNonce{} }
 
 // NewNonceCaller updates the nonceCaller for this session.
 // Password sessions don't have nonces.
@@ -409,7 +409,7 @@ func (s *hmacSession) CleanupFailure(tpm Interface) error {
 
 // NonceTPM returns the last nonceTPM value from the session.
 // May be nil, if the session hasn't been initialized yet.
-func (s *hmacSession) NonceTPM() []byte { return s.nonceTPM.Buffer }
+func (s *hmacSession) NonceTPM() TPM2BNonce { return s.nonceTPM }
 
 // To avoid a circular dependency on tpmdirect by tpm2, implement a
 // tiny serialization by hand for TPMASession here
@@ -639,8 +639,9 @@ type policySession struct {
 	callback *PolicyCallback
 }
 
-// Policy sets up a just-in-time policy session that is used only once.
-// A real session is created, but just in time and it is flushed when used.
+// Policy sets up a just-in-time policy session that created each time it's needed.
+// Each time the policy is created, the callback is invoked to authorize the session.
+// A real session is created, but just in time, and it is flushed when used.
 func Policy(hash TPMIAlgHash, nonceSize int, callback PolicyCallback, opts ...AuthOption) Session {
 	// Set up a one-off session that knows the auth value.
 	sess := policySession{
@@ -656,7 +657,9 @@ func Policy(hash TPMIAlgHash, nonceSize int, callback PolicyCallback, opts ...Au
 	return &sess
 }
 
-// PolicySession sets up a reusable policy session that needs to be closed.
+// PolicySession opens a policy session that needs to be closed.
+// The caller is responsible to call whichever policy commands they want in the session.
+// Note that the TPM resets a policy session after it is successfully used.
 func PolicySession(tpm Interface, hash TPMIAlgHash, nonceSize int, opts ...AuthOption) (s Session, close func() error, err error) {
 	// Set up a not-one-off session that knows the auth value.
 	sess := policySession{
@@ -766,7 +769,7 @@ func (s *policySession) CleanupFailure(tpm Interface) error {
 
 // NonceTPM returns the last nonceTPM value from the session.
 // May be nil, if the session hasn't been initialized yet.
-func (s *policySession) NonceTPM() []byte { return s.nonceTPM.Buffer }
+func (s *policySession) NonceTPM() TPM2BNonce { return s.nonceTPM }
 
 // NewNonceCaller updates the nonceCaller for this session.
 func (s *policySession) NewNonceCaller() error {
@@ -918,7 +921,7 @@ func (s *policySession) Decrypt(parameter []byte) error {
 }
 
 // Handle returns the handle value of the session.
-// If the session is created with HMAC (instead of HMACSession) this will be TPM_RH_NULL.
+// If the session is created with Policy (instead of PolicySession) this will be TPM_RH_NULL.
 func (s *policySession) Handle() TPMHandle {
 	return s.handle
 }
