@@ -658,7 +658,7 @@ func cmdAuths(cmd Command) ([]Session, error) {
 			return nil, fmt.Errorf("'auth'-tagged member of %v was of type %v instead of AuthHandle",
 				reflect.TypeOf(cmd), authHandle.Type())
 		}
-		result = append(result, handle.EffectiveAuth())
+		result = append(result, handle.effectiveAuth())
 	}
 
 	return result, nil
@@ -698,7 +698,7 @@ func cmdNames(cmd Command) ([]TPM2BName, error) {
 			return nil, fmt.Errorf("'auth'-tagged member of %v was of type %v instead of AuthHandle",
 				reflect.TypeOf(cmd), authHandle.Type())
 		}
-		result = append(result, handle.EffectiveName())
+		result = append(result, handle.effectiveName())
 	}
 
 	return result, nil

@@ -29,29 +29,29 @@ type AuthHandle struct {
 	Auth Session `tpmdirect:"skip"`
 }
 
-// EffectiveHandle returns the effective handle value.
+// effectiveHandle returns the effective handle value.
 // Returns TPM_RH_NULL if unset.
-func (a *AuthHandle) EffectiveHandle() TPMIDHObject {
+func (a *AuthHandle) effectiveHandle() TPMIDHObject {
 	if a.Handle != 0 {
 		return a.Handle
 	}
 	return TPMRHNull
 }
 
-// EffectiveName returns the effective Name.
+// effectiveName returns the effective Name.
 // Returns the handle value as a name if unset.
-func (a *AuthHandle) EffectiveName() TPM2BName {
+func (a *AuthHandle) effectiveName() TPM2BName {
 	if len(a.Name.Buffer) > 0 {
 		return a.Name
 	}
 	buf := make([]byte, 4)
-	binary.BigEndian.PutUint32(buf, uint32(a.EffectiveHandle()))
+	binary.BigEndian.PutUint32(buf, uint32(a.effectiveHandle()))
 	return TPM2BName{buf}
 }
 
-// EffectiveAuth returns the effective auth session.
+// effectiveAuth returns the effective auth session.
 // Returns a NULL password session if unset.
-func (a *AuthHandle) EffectiveAuth() Session {
+func (a *AuthHandle) effectiveAuth() Session {
 	if a.Auth == nil {
 		return PasswordAuth(nil)
 	}
