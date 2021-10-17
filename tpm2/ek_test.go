@@ -1,10 +1,9 @@
-package tpmdirect_test
+package tpm2_test
 
 import (
 	"errors"
 	"testing"
 
-	"github.com/chrisfenner/tpmdirect/reflect/tpmdirect"
 	"github.com/chrisfenner/tpmdirect/tpm2"
 )
 
@@ -37,12 +36,12 @@ func ekPolicy(tpm tpm2.Interface, handle tpm2.TPMISHPolicy, nonceTPM tpm2.TPM2BN
 func ekTest(t *testing.T, ekTemplate tpm2.TPM2BPublic) {
 	type ekTestCase struct {
 		name string
-		// Use Policy instead of PolicySession, passing the callback instead of
+		// Use tpm2.Policy instead of tpm2.PolicySession, passing the callback instead of
 		// managing it ourselves?
 		jitPolicySession bool
 		// Use the policy session for decrypt? (Incompatible with decryptAnotherSession)
 		decryptPolicySession bool
-		// Use another session for decrypt? (Incompatible with decryptPolicySession)
+		// Use another session for decrypt? (Incompatible with decrypttpm2.PolicySession)
 		decryptAnotherSession bool
 		// Use a bound session?
 		bound bool
@@ -90,7 +89,7 @@ func ekTest(t *testing.T, ekTemplate tpm2.TPM2BPublic) {
 		}
 	}
 
-	tpm, err := tpmdirect.Open(tpm2.LocalSimulator)
+	tpm, err := tpm2.Open(tpm2.LocalSimulator)
 	if err != nil {
 		t.Fatalf("could not connect to TPM simulator: %v", err)
 	}
@@ -121,7 +120,7 @@ func ekTest(t *testing.T, ekTemplate tpm2.TPM2BPublic) {
 				}
 			}()
 
-			// Exercise the EK's auth policy (PolicySecret[RH_ENDORSEMENT])
+			// Exercise the EK's auth policy (tpm2.PolicySecret[RH_ENDORSEMENT])
 			// by creating an object under it
 			data := []byte("secrets")
 			createBlobCmd := tpm2.CreateCommand{
@@ -213,7 +212,7 @@ func ekTest(t *testing.T, ekTemplate tpm2.TPM2BPublic) {
 				// Finally, for non-JIT policy sessions, make sure we fail if
 				// we don't re-initialize the session.
 				// This is because after using a policy session, it's as if
-				// PolicyRestart was called.
+				// tpm2.PolicyRestart was called.
 				err := tpm.Execute(&createBlobCmd, &createBlobRsp, sessions...)
 				if err == nil {
 					t.Fatalf("wanted an error, got nil")

@@ -5,14 +5,13 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/chrisfenner/tpmdirect/reflect/tpmdirect"
 	"github.com/chrisfenner/tpmdirect/tpm2"
 )
 
 // Test sealing and unsealing a blob with password auth.
 // Note that auth values and secrets will travel in the clear across the TPM bus.
 func TestSealUnseal(t *testing.T) {
-	tpm, err := tpmdirect.Open(tpm2.LocalSimulator)
+	tpm, err := tpm2.Open(tpm2.LocalSimulator)
 	if err != nil {
 		t.Fatalf("could not connect to TPM simulator: %v", err)
 	}
@@ -143,7 +142,7 @@ func TestSealUnseal(t *testing.T) {
 // Test sealing and unsealing a blob with HMAC auth and parameter encryption.
 // Sensitive values during this test do not travel in the clear over the TPM bus.
 func TestSealUnsealSecure(t *testing.T) {
-	tpm, err := tpmdirect.Open(tpm2.LocalSimulator)
+	tpm, err := tpm2.Open(tpm2.LocalSimulator)
 	if err != nil {
 		t.Fatalf("could not connect to TPM simulator: %v", err)
 	}

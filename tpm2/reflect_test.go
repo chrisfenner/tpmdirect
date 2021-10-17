@@ -1,4 +1,4 @@
-package tpmdirect
+package tpm2
 
 import (
 	"bytes"

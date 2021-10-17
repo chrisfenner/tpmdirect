@@ -1,5 +1,4 @@
-// package tpmdirect is the reflection-based implementation of TPMDirect
-package tpmdirect
+package tpm2
 
 import (
 	"bytes"
@@ -9,8 +8,6 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
-
-	"github.com/chrisfenner/tpmdirect/tpm2"
 )
 
 const (
@@ -22,12 +19,12 @@ const (
 // TPM represents a logical connection to a TPM. Support for
 // various commands is provided at runtime using reflection.
 type TPM struct {
-	transport tpm2.Transport
+	transport Transport
 }
 
 // Open opens a TPM connection using the provided transport open function.
 // When this TPM connection is closed, the transport is closed.
-func Open(opener func() (tpm2.Transport, error)) (tpm2.Interface, error) {
+func Open(opener func() (Transport, error)) (Interface, error) {
 	t, err := opener()
 	if err != nil {
 		return nil, err
@@ -44,7 +41,7 @@ func (t *TPM) Close() error {
 }
 
 // Execute sends the provided command and returns the provided response.
-func (t *TPM) Execute(cmd tpm2.Command, rsp tpm2.Response, extraSess ...tpm2.Session) error {
+func (t *TPM) Execute(cmd Command, rsp Response, extraSess ...Session) error {
 	cc := cmd.Command()
 	if rsp.Response() != cc {
 		return fmt.Errorf("cmd and rsp must be for same command: %v != %v", cc, rsp.Response())
@@ -123,7 +120,7 @@ func (t *TPM) Execute(cmd tpm2.Command, rsp tpm2.Response, extraSess ...tpm2.Ses
 	if hasSessions {
 		// We don't need the TPM RC here because we would have errored out from rspHeader
 		// TODO: Authenticate the error code with sessions, if desired.
-		err = rspSessions(rspBuf, tpm2.TPMRCSuccess, cc, names, rspParms, sess)
+		err = rspSessions(rspBuf, TPMRCSuccess, cc, names, rspParms, sess)
 		if err != nil {
 			return err
 		}
@@ -207,7 +204,7 @@ func marshalStruct(buf *bytes.Buffer, v reflect.Value) error {
 		// Special case: Treat a zero-valued nullable field as TPMAlgNull for union selection.
 		// This allows callers to omit uninteresting scheme structures.
 		if v.Field(i).IsZero() && hasTag(v.Type().Field(i), "nullable") {
-			possibleSelectors[v.Type().Field(i).Name] = int64(tpm2.TPMAlgNull)
+			possibleSelectors[v.Type().Field(i).Name] = int64(TPMAlgNull)
 			continue
 		}
 		switch v.Field(i).Kind() {
@@ -248,13 +245,13 @@ func marshalStruct(buf *bytes.Buffer, v reflect.Value) error {
 		} else if v.Field(i).IsZero() && v.Field(i).Kind() == reflect.Uint32 && hasTag(v.Type().Field(i), "nullable") {
 			// Special case: Anything with the same underlying type as TPMHandle's zero value is TPM_RH_NULL.
 			// This allows callers to omit uninteresting handles instead of specifying them as TPM_RH_NULL.
-			if err := binary.Write(&res, binary.BigEndian, uint32(tpm2.TPMRHNull)); err != nil {
+			if err := binary.Write(&res, binary.BigEndian, uint32(TPMRHNull)); err != nil {
 				return err
 			}
 		} else if v.Field(i).IsZero() && v.Field(i).Kind() == reflect.Uint16 && hasTag(v.Type().Field(i), "nullable") {
 			// Special case: Anything with the same underlying type as TPMAlg's zero value is TPM_ALG_NULL.
 			// This allows callers to omit uninteresting algorithms/schemes instead of specifying them as TPM_ALG_NULL.
-			if err := binary.Write(&res, binary.BigEndian, uint16(tpm2.TPMAlgNull)); err != nil {
+			if err := binary.Write(&res, binary.BigEndian, uint16(TPMAlgNull)); err != nil {
 				return err
 			}
 		} else {
@@ -313,7 +310,7 @@ func marshalBitwise(buf *bytes.Buffer, v reflect.Value) error {
 // Marshals nothing if the selector is equal to TPM_ALG_NULL (0x0010)
 func marshalUnion(buf *bytes.Buffer, v reflect.Value, selector int64) error {
 	// Special case: TPM_ALG_NULL as a selector means marshal nothing
-	if selector == int64(tpm2.TPMAlgNull) {
+	if selector == int64(TPMAlgNull) {
 		return nil
 	}
 	for i := 0; i < v.NumField(); i++ {
@@ -538,7 +535,7 @@ func unmarshalBitwise(buf *bytes.Buffer, v reflect.Value) error {
 // Unmarshals nothing if the selector is TPM_ALG_NULL (0x0010)
 func unmarshalUnion(buf *bytes.Buffer, v reflect.Value, selector int64) error {
 	// Special case: TPM_ALG_NULL as a selector means unmarshal nothing
-	if selector == int64(tpm2.TPMAlgNull) {
+	if selector == int64(TPMAlgNull) {
 		return nil
 	}
 	for i := 0; i < v.NumField(); i++ {
@@ -652,13 +649,13 @@ func taggedMembers(v reflect.Value, tag string, invert bool) []reflect.Value {
 }
 
 // cmdAuths returns the authorization sessions of the command.
-func cmdAuths(cmd tpm2.Command) ([]tpm2.Session, error) {
+func cmdAuths(cmd Command) ([]Session, error) {
 	authHandles := taggedMembers(reflect.ValueOf(cmd).Elem(), "auth", false)
-	var result []tpm2.Session
+	var result []Session
 	for _, authHandle := range authHandles {
-		handle, ok := authHandle.Interface().(tpm2.AuthHandle)
+		handle, ok := authHandle.Interface().(AuthHandle)
 		if !ok {
-			return nil, fmt.Errorf("'auth'-tagged member of %v was of type %v instead of tpm2.AuthHandle",
+			return nil, fmt.Errorf("'auth'-tagged member of %v was of type %v instead of AuthHandle",
 				reflect.TypeOf(cmd), authHandle.Type())
 		}
 		result = append(result, handle.EffectiveAuth())
@@ -668,7 +665,7 @@ func cmdAuths(cmd tpm2.Command) ([]tpm2.Session, error) {
 }
 
 // numAuthHandles returns the number of authorization sessions needed for the command.
-func numAuthHandles(cmd tpm2.Command) int {
+func numAuthHandles(cmd Command) int {
 	result := 0
 	cmdType := reflect.TypeOf(cmd).Elem()
 	for i := 0; i < cmdType.NumField(); i++ {
@@ -680,7 +677,7 @@ func numAuthHandles(cmd tpm2.Command) int {
 }
 
 // cmdHandles returns the handles area of the command.
-func cmdHandles(cmd tpm2.Command) []byte {
+func cmdHandles(cmd Command) []byte {
 	handles := taggedMembers(reflect.ValueOf(cmd).Elem(), "handle", false)
 
 	// Initial capacity is enough to hold 3 handles
@@ -692,13 +689,13 @@ func cmdHandles(cmd tpm2.Command) []byte {
 }
 
 // cmdNames returns the authorized names of the command.
-func cmdNames(cmd tpm2.Command) ([]tpm2.TPM2BName, error) {
+func cmdNames(cmd Command) ([]TPM2BName, error) {
 	authHandles := taggedMembers(reflect.ValueOf(cmd).Elem(), "auth", false)
-	var result []tpm2.TPM2BName
+	var result []TPM2BName
 	for _, authHandle := range authHandles {
-		handle, ok := authHandle.Interface().(tpm2.AuthHandle)
+		handle, ok := authHandle.Interface().(AuthHandle)
 		if !ok {
-			return nil, fmt.Errorf("'auth'-tagged member of %v was of type %v instead of tpm2.AuthHandle",
+			return nil, fmt.Errorf("'auth'-tagged member of %v was of type %v instead of AuthHandle",
 				reflect.TypeOf(cmd), authHandle.Type())
 		}
 		result = append(result, handle.EffectiveName())
@@ -709,7 +706,7 @@ func cmdNames(cmd tpm2.Command) ([]tpm2.TPM2BName, error) {
 
 // cmdParameters returns the parameters area of the command.
 // The first parameter may be encrypted by one of the sessions.
-func cmdParameters(cmd tpm2.Command, sess []tpm2.Session) ([]byte, error) {
+func cmdParameters(cmd Command, sess []Session) ([]byte, error) {
 	parms := taggedMembers(reflect.ValueOf(cmd).Elem(), "handle", true)
 	if len(parms) == 0 {
 		return nil, nil
@@ -747,7 +744,7 @@ func cmdParameters(cmd tpm2.Command, sess []tpm2.Session) ([]byte, error) {
 }
 
 // cmdSessions returns the authorization area of the command.
-func cmdSessions(tpm *TPM, sess []tpm2.Session, cc tpm2.TPMCC, names []tpm2.TPM2BName, parms []byte) ([]byte, error) {
+func cmdSessions(tpm *TPM, sess []Session, cc TPMCC, names []TPM2BName, parms []byte) ([]byte, error) {
 	// There is no authorization area if there are no sessions.
 	if len(sess) == 0 {
 		return nil, nil
@@ -804,12 +801,12 @@ func cmdSessions(tpm *TPM, sess []tpm2.Session, cc tpm2.TPMCC, names []tpm2.TPM2
 }
 
 // cmdHeader returns the structured TPM command header.
-func cmdHeader(hasSessions bool, length int, cc tpm2.TPMCC) []byte {
-	tag := tpm2.TPMSTNoSessions
+func cmdHeader(hasSessions bool, length int, cc TPMCC) []byte {
+	tag := TPMSTNoSessions
 	if hasSessions {
-		tag = tpm2.TPMSTSessions
+		tag = TPMSTSessions
 	}
-	hdr := tpm2.TPMCmdHeader{
+	hdr := TPMCmdHeader{
 		Tag:         tag,
 		Length:      uint32(length),
 		CommandCode: cc,
@@ -823,11 +820,11 @@ func cmdHeader(hasSessions bool, length int, cc tpm2.TPMCC) []byte {
 // returns an error here.
 // rsp is updated to point to the rest of the response after the header.
 func rspHeader(rsp *bytes.Buffer) error {
-	var hdr tpm2.TPMRspHeader
+	var hdr TPMRspHeader
 	if err := unmarshal(rsp, reflect.ValueOf(&hdr).Elem()); err != nil {
 		return fmt.Errorf("unmarshalling TPM response: %w", err)
 	}
-	if hdr.ResponseCode != tpm2.TPMRCSuccess {
+	if hdr.ResponseCode != TPMRCSuccess {
 		return hdr.ResponseCode
 	}
 	return nil
@@ -837,7 +834,7 @@ func rspHeader(rsp *bytes.Buffer) error {
 // If there is a mismatch between the expected and actual amount of handles,
 // returns an error here.
 // rsp is updated to point to the rest of the response after the handles.
-func rspHandles(rsp *bytes.Buffer, rspStruct tpm2.Response) error {
+func rspHandles(rsp *bytes.Buffer, rspStruct Response) error {
 	handles := taggedMembers(reflect.ValueOf(rspStruct).Elem(), "handle", false)
 	for i, handle := range handles {
 		if err := unmarshal(rsp, handle); err != nil {
@@ -882,9 +879,9 @@ func rspParametersArea(hasSessions bool, rsp *bytes.Buffer) ([]byte, error) {
 // the sessions with it. If there is a response validation error, returns
 // an error here.
 // rsp is updated to point to the rest of the response after the sessions.
-func rspSessions(rsp *bytes.Buffer, rc tpm2.TPMRC, cc tpm2.TPMCC, names []tpm2.TPM2BName, parms []byte, sess []tpm2.Session) error {
+func rspSessions(rsp *bytes.Buffer, rc TPMRC, cc TPMCC, names []TPM2BName, parms []byte, sess []Session) error {
 	for i, s := range sess {
-		var auth tpm2.TPMSAuthResponse
+		var auth TPMSAuthResponse
 		if err := unmarshal(rsp, reflect.ValueOf(&auth).Elem()); err != nil {
 			return fmt.Errorf("reading auth session %d: %w", i, err)
 		}
@@ -901,7 +898,7 @@ func rspSessions(rsp *bytes.Buffer, rc tpm2.TPMRC, cc tpm2.TPMCC, names []tpm2.T
 // rspParameters decrypts (if needed) the parameters area of the response
 // into the response structure. If there is a mismatch between the expected
 // and actual response structure, returns an error here.
-func rspParameters(parms []byte, sess []tpm2.Session, rspStruct tpm2.Response) error {
+func rspParameters(parms []byte, sess []Session, rspStruct Response) error {
 	parmsFields := taggedMembers(reflect.ValueOf(rspStruct).Elem(), "handle", true)
 
 	// Use the heuristic of "does interpreting the first 2 bytes of response as a length
