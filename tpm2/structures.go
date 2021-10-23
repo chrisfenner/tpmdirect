@@ -1,5 +1,7 @@
 package tpm2
 
+import "fmt"
+
 // Part 1 structures that aren't defined in Part 2
 type TPMCmdHeader struct {
 	Tag         TPMISTCommandTag
@@ -31,6 +33,16 @@ type TPMKeySize uint16
 
 // a key size in bits
 type TPMKeyBits uint16
+
+// 6.2
+type TPMGenerated uint32
+
+func (g TPMGenerated) Check() error {
+	if g != TPMGeneratedValue {
+		return fmt.Errorf("TPM_GENERATED value should be 0x%x, was 0x%x", TPMGeneratedValue, g)
+	}
+	return nil
+}
 
 // 6.3
 type TPMAlgID uint16
@@ -206,6 +218,10 @@ type TPMALocality struct {
 	Extended uint8 `tpmdirect:"bit=7:5"`
 }
 
+// 9.2
+// Use native bool for TPMI_YES_NO; encoding/binary already treats this as 8 bits wide.
+type TPMIYesNo = bool
+
 // 9.3
 type TPMIDHObject = TPMHandle
 
@@ -214,6 +230,9 @@ type TPMIDHEntity = TPMHandle
 
 // 9.8
 type TPMISHAuthSession = TPMHandle
+
+// 9.9
+type TPMISHHMAC = TPMHandle
 
 // 9.10
 type TPMISHPolicy = TPMHandle
@@ -242,11 +261,33 @@ type TPMIAlgSymMode = TPMAlgID
 // 9.32
 type TPMIAlgKDF = TPMAlgID
 
+// 9.33
+type TPMIAlgSigScheme = TPMAlgID
+
 // 9.35
 type TPMISTCommandTag = TPMST
 
 // 10.1
 type TPMSEmpty = struct{}
+
+// 10.3.1
+type TPMUHA struct {
+	SHA1     *[20]byte `tpmdirect:"selector=0x0004"` // TPM_ALG_SHA1
+	SHA256   *[32]byte `tpmdirect:"selector=0x000B"` // TPM_ALG_SHA256
+	SHA384   *[48]byte `tpmdirect:"selector=0x000C"` // TPM_ALG_SHA384
+	SHA512   *[64]byte `tpmdirect:"selector=0x000D"` // TPM_ALG_SHA512
+	SHA3_256 *[32]byte `tpmdirect:"selector=0x0027"` // TPM_ALG_SHA3_256
+	SHA3_384 *[48]byte `tpmdirect:"selector=0x0028"` // TPM_ALG_SHA3_384
+	SHA3_512 *[64]byte `tpmdirect:"selector=0x0029"` // TPM_ALG_SHA3_512
+}
+
+// 10.3.2
+type TPMTHA struct {
+	// selector of the hash contained in the digest that implies the size of the digest
+	HashAlg TPMIAlgHash `tpmdirect:"nullable"`
+	// the digest data
+	Digest TPMUHA `tpmdirect:"tag=HashAlg"`
+}
 
 // 10.4.2
 type TPM2BDigest TPM2BData
@@ -259,6 +300,9 @@ type TPM2BData struct {
 
 // 10.4.4
 type TPM2BNonce TPM2BDigest
+
+// 10.4.7
+type TPM2BEvent TPM2BData
 
 // 10.4.10
 type TPM2BTimeout TPM2BData
@@ -298,9 +342,154 @@ type TPMTTKAuth struct {
 	Digest TPM2BDigest
 }
 
+// 10.9.5
+type TPMLDigest struct {
+	// a list of digests
+	DIgests []TPM2BDigest `tpmdirect:"list"`
+}
+
+// 10.9.6
+type TPMLDigestValues struct {
+	// a list of tagged digests
+	Digests []TPMTHA `tpmdirect:"list"`
+}
+
 // 10.9.7
 type TPMLPCRSelection struct {
 	PCRSelections []TPMSPCRSelection `tpmdirect:"list"`
+}
+
+// 10.11.1
+type TPMSClockInfo struct {
+	// time value in milliseconds that advances while the TPM is powered
+	Clock uint64
+	// number of occurrences of TPM Reset since the last TPM2_Clear()
+	ResetCount uint32
+	// number of times that TPM2_Shutdown() or _TPM_Hash_Start have
+	// occurred since the last TPM Reset or TPM2_Clear().
+	RestartCount uint32
+	// no value of Clock greater than the current value of Clock has been
+	// previously reported by the TPM. Set to YES on TPM2_Clear().
+	Safe TPMIYesNo
+}
+
+// 10.11.6
+type TPMSTimeInfo struct {
+	// time in milliseconds since the TIme circuit was last reset
+	Time uint64
+	// a structure containing the clock information
+	ClockInfo TPMSClockInfo
+}
+
+// 10.12.2
+type TPMSTimeAttestInfo struct {
+	// the Time, Clock, resetCount, restartCount, and Safe indicator
+	Time TPMSTimeInfo
+	// a TPM vendor-specific value indicating the version number of the firmware
+	FirmwareVersion uint64
+}
+
+// 10.12.3
+type TPMSCertifyInfo struct {
+	// Name of the certified object
+	Name TPM2BName
+	// Qualified Name of the certified object
+	QualifiedName TPM2BName
+}
+
+// 10.12.4
+type TPMSQuoteInfo struct {
+	// information on algID, PCR selected and digest
+	PCRSelect TPMLPCRSelection
+	// digest of the selected PCR using the hash of the signing key
+	PCRDigest TPM2BDigest
+}
+
+// 10.12.5
+type TPMSCommandAuditInfo struct {
+	// the monotonic audit counter
+	AuditCounter uint64
+	// hash algorithm used for the command audit
+	DigestAlg TPMAlgID
+	// the current value of the audit digest
+	AuditDigest TPM2BDigest
+	// digest of the command codes being audited using digestAlg
+	CommandDigest TPM2BDigest
+}
+
+// 10.12.6
+type TPMSSessionAuditInfo struct {
+	// current exclusive status of the session
+	ExclusiveSession TPMIYesNo
+	// the current value of the session audit digest
+	SessionDigest TPM2BDigest
+}
+
+// 10.12.7
+type TPMSCreationInfo struct {
+	// Name of the object
+	ObjectName TPM2BName
+	// creationHash
+	CreationHash TPM2BDigest
+}
+
+// 10.12.8
+type TPMSNVCertifyInfo struct {
+	// Name of the NV Index
+	IndexName TPM2BName
+	// the offset parameter of TPM2_NV_Certify()
+	Offset uint16
+	// contents of the NV Index
+	NVContents TPM2BData
+}
+
+// 10.12.9
+type TPMSNVDigestCertifyInfo struct {
+	// Name of the NV Index
+	IndexName TPM2BName
+	// hash of the contents of the index
+	NVDigest TPM2BDigest
+}
+
+// 10.12.10
+type TPMISTAttest = TPMST
+
+// 10.12.11
+type TPMUAttest struct {
+	NV           *TPMSNVCertifyInfo       `tpmdirect:"selector=0x8014"` // TPM_ST_ATTEST_NV
+	CommandAudit *TPMSCommandAuditInfo    `tpmdirect:"selector=0x8015"` // TPM_ST_ATTEST_COMMAND_AUDIT
+	SessionAudit *TPMSSessionAuditInfo    `tpmdirect:"selector=0x8016"` // TPM_ST_ATTEST_SESSION_AUDIT
+	Certify      *TPMSCertifyInfo         `tpmdirect:"selector=0x8017"` // TPM_ST_ATTEST_CERTIFY
+	Quote        *TPMSQuoteInfo           `tpmdirect:"selector=0x8018"` // TPM_ST_ATTEST_QUOTE
+	Time         *TPMSTimeAttestInfo      `tpmdirect:"selector=0x8019"` // TPM_ST_ATTEST_TIME
+	Creation     *TPMSCreationInfo        `tpmdirect:"selector=0x801A"` // TPM_ST_ATTEST_CREATION
+	NVDigest     *TPMSNVDigestCertifyInfo `tpmdirect:"selector=0x801C"` // TPM_ST_ATTEST_NV_DIGEST
+}
+
+// 10.12.12
+type TPMSAttest struct {
+	// the indication that this structure was created by a TPM (always TPM_GENERATED_VALUE)
+	Magic TPMGenerated `tpmdirect:"check"`
+	// type of the attestation structure
+	Type TPMISTAttest
+	// Qualified Name of the signing key
+	QualifiedSigner TPM2BName
+	// external information supplied by caller
+	ExtraData TPM2BData
+	// Clock, resetCount, restartCount, and Safe
+	ClockInfo TPMSClockInfo
+	// TPM-vendor-specific value identifying the version number of the firmware
+	FirmwareVersion uint64
+	// the type-specific attestation information
+	Attested TPMUAttest `tpmdirect:"tag=Type"`
+}
+
+// 10.12.13
+// Note that in the spec, this is just a 2B_DATA with enough room for an S_ATTEST.
+// For ergonomics, pretend that TPM2B_Attest wraps a TPMS_Attest just like other 2Bs.
+type TPM2BAttest struct {
+	// the signed structure
+	AttestationData TPMSAttest `tpmdirect:"sized"`
 }
 
 // 10.13.2
@@ -432,6 +621,20 @@ type TPMSSigSchemeRSAPSS TPMSSchemeHash
 // 11.2.1.3
 type TPMSSigSchemeECDSA TPMSSchemeHash
 
+// 11.2.1.4
+type TPMUSigScheme struct {
+	HMAC   *TPMSSchemeHMAC `tpmdirect:"selector=0x0005"` // TPM_ALG_HMAC
+	RSASSA *TPMSSchemeHash `tpmdirect:"selector=0x0014"` // TPM_ALG_RSASSA
+	RSAPSS *TPMSSchemeHash `tpmdirect:"selector=0x0016"` // TPM_ALG_RSAPSS
+	ECDSA  *TPMSSchemeHash `tpmdirect:"selector=0x0018"` // TPM_ALG_ECDSA
+}
+
+// 11.2.1.5
+type TPMTSigScheme struct {
+	Scheme  TPMIAlgSigScheme `tpmdirect:"nullable"`
+	Details TPMUSigScheme    `tpmdirect:"tag=Scheme"`
+}
+
 // 11.2.2.2
 type TPMSEncSchemeRSAES TPMSEmpty
 type TPMSEncSchemeOAEP TPMSSchemeHash
@@ -516,7 +719,39 @@ type TPMTECCScheme struct {
 	Details TPMUAsymScheme `tpmdirect:"tag=Scheme"`
 }
 
-// 11.433
+// 11.3.1
+type TPMSSignatureRSA struct {
+	// the hash algorithm used to digest the message
+	Hash TPMIAlgHash
+	// The signature is the size of a public key.
+	Sig TPM2BPublicKeyRSA
+}
+
+// 11.3.2
+type TPMSSignatureECC struct {
+	// the hash algorithm used in the signature process
+	Hash       TPMIAlgHash
+	SignatureR TPM2BECCParameter
+	SignatureS TPM2BECCParameter
+}
+
+// 11.3.3
+type TPMUSignature struct {
+	HMAC   *TPMTHA           `tpmdirect:"selector=0x0005"` // TPM_ALG_HMAC
+	RSASSA *TPMSSignatureRSA `tpmdirect:"selector=0x0014"` // TPM_ALG_RSASSA
+	RSAPSS *TPMSSignatureRSA `tpmdirect:"selector=0x0016"` // TPM_ALG_RSAPSS
+	ECDSA  *TPMSSignatureECC `tpmdirect:"selector=0x0018"` // TPM_ALG_ECDSA
+}
+
+// 11.3.4
+type TPMTSignature struct {
+	// selector of the algorithm used to construct the signature
+	SigAlg TPMIAlgSigScheme `tpmdirect:"nullable"`
+	// This shall be the actual signature information.
+	Signature TPMUSignature
+}
+
+// 11.4.33
 type TPM2BEncryptedSecret TPM2BData
 
 // 12.2.2

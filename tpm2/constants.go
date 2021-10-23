@@ -9,6 +9,11 @@ import (
 	"hash"
 )
 
+// 6.2
+const (
+	TPMGeneratedValue TPMGenerated = 0xff544347
+)
+
 // 6.3
 const (
 	TPMAlgRSA          TPMAlgID = 0x0001

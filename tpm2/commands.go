@@ -178,6 +178,103 @@ type UnsealResponse struct {
 
 func (_ *UnsealResponse) Response() TPMCC { return TPMCCUnseal }
 
+// 18.4
+type QuoteCommand struct {
+	// handle of key that will perform signature
+	SignHandle AuthHandle `tpmdirect:"handle,auth"`
+	// data supplied by the caller
+	QualifyingData TPM2BData
+	// signing scheme to use if the scheme for signHandle is TPM_ALG_NULL
+	InScheme TPMTSigScheme
+	// PCR set to quote
+	PCRSelect TPMLPCRSelection
+}
+
+func (_ *QuoteCommand) Command() TPMCC { return TPMCCQuote }
+
+type QuoteResponse struct {
+	// the quoted information
+	Quoted TPM2BAttest
+	// the signature over quoted
+	Signature TPMTSignature
+}
+
+func (_ *QuoteResponse) Response() TPMCC { return TPMCCQuote }
+
+// 18.5
+type GetSessionAuditDigestCommand struct {
+	// handle of the privacy administrator (TPM_RH_ENDORSEMENT)
+	PrivacyAdminHandle AuthHandle `tpmdirect:"handle,auth"`
+	// handle of the signing key
+	SignHandle AuthHandle `tpmdirect:"handle,auth"`
+	// handle of the audit session
+	SessionHandle TPMISHHMAC `tpmdirect:"handle"`
+	// user-provided qualifying data – may be zero-length
+	QualifyingData TPM2BData
+	// signing scheme to use if the scheme for signHandle is TPM_ALG_NULL
+	InScheme TPMTSigScheme
+}
+
+func (_ *GetSessionAuditDigestCommand) Command() TPMCC { return TPMCCGetSessionAuditDigest }
+
+type GetSessionAuditDigestResponse struct {
+	// the audit information that was signed
+	AuditInfo TPM2BAttest
+	// the signature over auditInfo
+	Signature TPMTSignature
+}
+
+func (_ *GetSessionAuditDigestResponse) Response() TPMCC { return TPMCCGetSessionAuditDigest }
+
+// 22.2
+type PCRExtendCommand struct {
+	// handle of the PCR
+	PCRHandle AuthHandle `tpmdirect:"handle,auth"`
+	// list of tagged digest values to be extended
+	Digests TPMLDigestValues
+}
+
+func (_ *PCRExtendCommand) Command() TPMCC { return TPMCCPCRExtend }
+
+type PCRExtendResponse struct {
+}
+
+func (_ *PCRExtendResponse) Response() TPMCC { return TPMCCPCRExtend }
+
+// 22.3
+type PCREventCommand struct {
+	// Handle of the PCR
+	PCRHandle AuthHandle `tpmdirect:"handle,auth"`
+	// Event data in sized buffer
+	EventData TPM2BEvent
+}
+
+func (_ *PCREventCommand) Command() TPMCC { return TPMCCPCREvent }
+
+type PCREventResponse struct {
+}
+
+func (_ *PCREventResponse) Response() TPMCC { return TPMCCPCREvent }
+
+// 22.4
+type PCRReadCommand struct {
+	// The selection of PCR to read
+	PCRSelectionIn TPMLPCRSelection
+}
+
+func (_ *PCRReadCommand) Command() TPMCC { return TPMCCPCRRead }
+
+type PCRReadResponse struct {
+	// the current value of the PCR update counter
+	PCRUpdateCounter uint32
+	// the PCR in the returned list
+	PCRSelectionOut TPMLPCRSelection
+	// the contents of the PCR indicated in pcrSelectOut-> pcrSelection[] as tagged digests
+	PCRValues TPMLDigest
+}
+
+func (_ *PCRReadResponse) Response() TPMCC { return TPMCCPCRRead }
+
 // 23.4
 type PolicySecretCommand struct {
 	// handle for an entity providing the authorization
