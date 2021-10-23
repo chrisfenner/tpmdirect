@@ -12,8 +12,12 @@ type Simulator struct {
 }
 
 func LocalSimulator() (Transport, error) {
-	config := sim.TcpConfig{"127.0.0.1:2321"}
-	tpm, err := sim.OpenTcpTpm(&config)
+	config := sim.TcpConfig{
+		Address:      "127.0.0.1",
+		TPMPort:      2321,
+		PlatformPort: 2322,
+	}
+	tpm, err := sim.OpenTcpTpm(config)
 	if err != nil {
 		return nil, err
 	}

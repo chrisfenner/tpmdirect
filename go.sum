@@ -1,5 +1,11 @@
 github.com/chrisfenner/go-tpm-sim v0.0.0-20210819152419-ba0bd4abd739 h1:I3Ph+Rygf/LafAE6bhPMuQl4c1uGF0mIvLOAHmlWwRM=
 github.com/chrisfenner/go-tpm-sim v0.0.0-20210819152419-ba0bd4abd739/go.mod h1:dXadCRotTz1DvYDxnnoB0+ZWRaFWgkrb/x7fVzvMYJM=
+github.com/chrisfenner/go-tpm-sim v0.0.0-20211022230719-c601830e9963 h1:AVrdB+WKyEpSAS6xIq2ZNfQZPW9RVE2XWQeDucj0VaE=
+github.com/chrisfenner/go-tpm-sim v0.0.0-20211022230719-c601830e9963/go.mod h1:dXadCRotTz1DvYDxnnoB0+ZWRaFWgkrb/x7fVzvMYJM=
+github.com/chrisfenner/go-tpm-sim v0.0.0-20211022231627-1387c347259b h1:KVIczfPrYT15YHeLFdDSe5Sw+2qugXQcIzaFkTK9OXI=
+github.com/chrisfenner/go-tpm-sim v0.0.0-20211022231627-1387c347259b/go.mod h1:dXadCRotTz1DvYDxnnoB0+ZWRaFWgkrb/x7fVzvMYJM=
+github.com/chrisfenner/go-tpm-sim v0.0.0-20211022232009-8a050aba42b1 h1:ItDyH/dhCr8ACjJtecogJYeKffL5h3EJxMPKrwi1Wiw=
+github.com/chrisfenner/go-tpm-sim v0.0.0-20211022232009-8a050aba42b1/go.mod h1:dXadCRotTz1DvYDxnnoB0+ZWRaFWgkrb/x7fVzvMYJM=
 github.com/google/go-cmp v0.5.6 h1:BKbKCqvP6I+rmFHt06ZmyQtvB8xAkWdhFyr0ZUNZcxQ=
 github.com/google/go-cmp v0.5.6/go.mod h1:v8dTdLbMG2kIc/vJvl+f65V22dbkXbowE6jgT/gNBxE=
 golang.org/x/xerrors v0.0.0-20191204190536-9bdfabe68543 h1:E7g+9GITq07hpfrRu66IVDexMakfv52eLZ2CXBWiKr4=
