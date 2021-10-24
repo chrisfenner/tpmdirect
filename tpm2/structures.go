@@ -396,7 +396,7 @@ type TPM2BName TPM2BData
 // 10.6.2
 type TPMSPCRSelection struct {
 	Hash      TPMIAlgHash
-	PCRSelect TPM2BData
+	PCRSelect []byte `tpmdirect:"sized8"`
 }
 
 // 10.7.3
