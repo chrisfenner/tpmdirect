@@ -157,10 +157,8 @@ func marshalNumeric(buf *bytes.Buffer, v reflect.Value) error {
 }
 
 func marshalArray(buf *bytes.Buffer, v reflect.Value) error {
-	// binary.Write knows how to marshal slices of fixed-sized values, but not dynamic-sized values
-	// Iterate the contents and binary.Write them one at a time.
 	for i := 0; i < v.Len(); i++ {
-		if err := binary.Write(buf, binary.BigEndian, v.Index(i).Interface()); err != nil {
+		if err := marshal(buf, v.Index(i)); err != nil {
 			return fmt.Errorf("marshalling element %d of %v: %v", i, v.Type(), err)
 		}
 	}
