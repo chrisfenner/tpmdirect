@@ -83,7 +83,6 @@ func (t *TPM) Execute(cmd Command, rsp Response, extraSess ...Session) error {
 	command = append(command, parms...)
 
 	// Send the command via the transport.
-	fmt.Printf("cmd: %x\n", command)
 	response, err := t.transport.Send(command)
 	if err != nil {
 		return err
@@ -224,7 +223,6 @@ func marshalStruct(buf *bytes.Buffer, v reflect.Value) error {
 		// some unnecessary copying before talking to a low-speed device like a TPM)
 		var res bytes.Buffer
 		if list {
-			fmt.Printf("length of a list: %d\n", v.Field(i).Len())
 			binary.Write(&res, binary.BigEndian, uint32(v.Field(i).Len()))
 		}
 		if tag != "" {
