@@ -161,8 +161,12 @@ func marshal(buf *bytes.Buffer, vs ...reflect.Value) error {
 			if err := marshalStruct(buf, v); err != nil {
 				return err
 			}
+		case reflect.Ptr:
+			if err := marshalStruct(buf, v.Elem()); err != nil {
+				return err
+			}
 		default:
-			return fmt.Errorf("nor marshallable: %#v", v)
+			return fmt.Errorf("not marshallable: %#v", v)
 		}
 	}
 	return nil
