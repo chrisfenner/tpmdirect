@@ -352,3 +352,24 @@ type FlushContextResponse struct {
 }
 
 func (_ *FlushContextResponse) Response() TPMCC { return TPMCCFlushContext }
+
+// 30.2
+type GetCapabilityCommand struct {
+	// group selection; determines the format of the response
+	Capability TPMCap
+	// further definition of information
+	Property uint32
+	// number of properties of the indicated type to return
+	PropertyCount uint32
+}
+
+func (_ *GetCapabilityCommand) Command() TPMCC { return TPMCCGetCapability }
+
+type GetCapabilityResponse struct {
+	// flag to indicate if there are more values of this type
+	MoreData TPMIYesNo
+	// the capability data
+	CapabilityData TPMSCapabilityData
+}
+
+func (_ *GetCapabilityResponse) Response() TPMCC { return TPMCCGetCapability }

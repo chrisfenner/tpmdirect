@@ -12,6 +12,28 @@ import (
 	"fmt"
 )
 
+// cpHash calculates the TPM command parameter hash.
+// cpHash = hash(CC || names || parms)
+func cpHash(alg TPMIAlgHash, cc TPMCC, names []TPM2BName, parms []byte) []byte {
+	h := alg.Hash()
+	binary.Write(h, binary.BigEndian, cc)
+	for _, name := range names {
+		h.Write(name.Buffer)
+	}
+	h.Write(parms)
+	return h.Sum(nil)
+}
+
+// rpHash calculates the TPM response parameter hash.
+// rpHash = hash(RC || CC || parms)
+func rpHash(alg TPMIAlgHash, rc TPMRC, cc TPMCC, parms []byte) []byte {
+	h := alg.Hash()
+	binary.Write(h, binary.BigEndian, rc)
+	binary.Write(h, binary.BigEndian, cc)
+	h.Write(parms)
+	return h.Sum(nil)
+}
+
 // pwSession represents a password-pseudo-session.
 type pwSession struct {
 	auth []byte
@@ -445,18 +467,13 @@ func attrsToBytes(attrs TPMASession) []byte {
 // computeHMAC computes an authorization HMAC according to various equations in Part 1.
 // This applies to both commands and responses.
 // The value of key depends on whether the session is bound and/or salted.
-// parms is the data that goes into cpHash for a command, or an rpHash for a response.
-//     For a command, this is (CommandCode || Name(s) || Parameter area)
-//     For a response, this is (ResponseCode || CommandCode || Parameter area)
+// pHash cpHash for a command, or an rpHash for a response.
 // nonceNewer in a command is the new nonceCaller sent in the command session packet.
 // nonceNewer in a response is the new nonceTPM sent in the response session packet.
 // nonceOlder in a command is the last nonceTPM sent by the TPM for this session.
 //     This may be when the session was created, or the last time it was used.
 // nonceOlder in a response is the corresponding nonceCaller sent in the command.
-func computeHMAC(alg TPMIAlgHash, key, parms, nonceNewer, nonceOlder, addNonces []byte, attrs TPMASession) ([]byte, error) {
-	h := alg.Hash()
-	h.Write(parms)
-	pHash := h.Sum(nil)
+func computeHMAC(alg TPMIAlgHash, key, pHash, nonceNewer, nonceOlder, addNonces []byte, attrs TPMASession) ([]byte, error) {
 	mac := hmac.New(alg.Hash, key)
 	mac.Write(pHash)
 	mac.Write(nonceNewer)
@@ -491,13 +508,6 @@ func (s *hmacSession) Authorize(cc TPMCC, parms, addNonces []byte, names []TPM2B
 		// Session is not initialized.
 		return nil, fmt.Errorf("session not initialized")
 	}
-	// Calculate the parameter buffer for the HMAC.
-	var parmBuf bytes.Buffer
-	binary.Write(&parmBuf, binary.BigEndian, cc)
-	for _, name := range names {
-		parmBuf.Write(name.Buffer)
-	}
-	parmBuf.Write(parms)
 
 	// Part 1, 19.6
 	// HMAC key is (sessionKey || auth) unless this session is authorizing its bind target
@@ -508,7 +518,7 @@ func (s *hmacSession) Authorize(cc TPMCC, parms, addNonces []byte, names []TPM2B
 	}
 
 	// Compute the authorization HMAC.
-	hmac, err := computeHMAC(s.hash, hmacKey, parmBuf.Bytes(),
+	hmac, err := computeHMAC(s.hash, hmacKey, cpHash(s.hash, cc, names, parms),
 		s.nonceCaller.Buffer, s.nonceTPM.Buffer, addNonces, s.attrs)
 	if err != nil {
 		return nil, err
@@ -533,11 +543,6 @@ func (s *hmacSession) Validate(rc TPMRC, cc TPMCC, parms []byte, names []TPM2BNa
 	if !auth.Attributes.ContinueSession {
 		s.handle = TPMRHNull
 	}
-	// Calculate the parameter buffer for the HMAC.
-	var parmBuf bytes.Buffer
-	binary.Write(&parmBuf, binary.BigEndian, rc)
-	binary.Write(&parmBuf, binary.BigEndian, cc)
-	parmBuf.Write(parms)
 
 	// Part 1, 19.6
 	// HMAC key is (sessionKey || auth) unless this session is authorizing its bind target
@@ -548,7 +553,7 @@ func (s *hmacSession) Validate(rc TPMRC, cc TPMCC, parms []byte, names []TPM2BNa
 	}
 
 	// Compute the authorization HMAC.
-	mac, err := computeHMAC(s.hash, hmacKey, parmBuf.Bytes(),
+	mac, err := computeHMAC(s.hash, hmacKey, rpHash(s.hash, rc, cc, parms),
 		s.nonceTPM.Buffer, s.nonceCaller.Buffer, nil, auth.Attributes)
 	if err != nil {
 		return err
@@ -784,14 +789,6 @@ func (s *policySession) Authorize(cc TPMCC, parms, addNonces []byte, names []TPM
 		return nil, fmt.Errorf("session not initialized")
 	}
 
-	// Calculate the parameter buffer for the HMAC.
-	var parmBuf bytes.Buffer
-	binary.Write(&parmBuf, binary.BigEndian, cc)
-	for _, name := range names {
-		parmBuf.Write(name.Buffer)
-	}
-	parmBuf.Write(parms)
-
 	var hmac []byte
 	if s.password {
 		hmac = s.auth
@@ -804,7 +801,7 @@ func (s *policySession) Authorize(cc TPMCC, parms, addNonces []byte, names []TPM
 
 		// Compute the authorization HMAC.
 		var err error
-		hmac, err = computeHMAC(s.hash, hmacKey, parmBuf.Bytes(),
+		hmac, err = computeHMAC(s.hash, hmacKey, cpHash(s.hash, cc, names, parms),
 			s.nonceCaller.Buffer, s.nonceTPM.Buffer, addNonces, s.attrs)
 		if err != nil {
 			return nil, err
@@ -831,11 +828,6 @@ func (s *policySession) Validate(rc TPMRC, cc TPMCC, parms []byte, _ []TPM2BName
 	if !auth.Attributes.ContinueSession {
 		s.handle = TPMRHNull
 	}
-	// Calculate the parameter buffer for the HMAC.
-	var parmBuf bytes.Buffer
-	binary.Write(&parmBuf, binary.BigEndian, rc)
-	binary.Write(&parmBuf, binary.BigEndian, cc)
-	parmBuf.Write(parms)
 
 	if s.password {
 		// If we used a password, expect no nonce and no response HMAC.
@@ -852,7 +844,7 @@ func (s *policySession) Validate(rc TPMRC, cc TPMCC, parms []byte, _ []TPM2BName
 		hmacKey = append(hmacKey, s.sessionKey...)
 		hmacKey = append(hmacKey, hmacKeyFromAuthValue(s.auth)...)
 		// Compute the authorization HMAC.
-		mac, err := computeHMAC(s.hash, hmacKey, parmBuf.Bytes(),
+		mac, err := computeHMAC(s.hash, hmacKey, rpHash(s.hash, rc, cc, parms),
 			s.nonceTPM.Buffer, s.nonceCaller.Buffer, nil, auth.Attributes)
 		if err != nil {
 			return err

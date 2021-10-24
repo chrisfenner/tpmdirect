@@ -62,8 +62,47 @@ type TPMST uint16
 // 6.11
 type TPMSE uint8
 
+// 6.12
+type TPMCap uint32
+
+// 6.13
+type TPMPT uint32
+
+// 6.14
+type TPMPTPCR uint32
+
 // 7.1
 type TPMHandle uint32
+
+// 8.2
+type TPMAAlgorithm struct {
+	// SET (1): an asymmetric algorithm with public and private portions
+	// CLEAR (0): not an asymmetric algorithm
+	Asymmetric bool `tpmdirect:"bit=0"`
+	// SET (1): a symmetric block cipher
+	// CLEAR (0): not a symmetric block cipher
+	Symmetric bool `tpmdirect:"bit=1"`
+	// SET (1): a hash algorithm
+	// CLEAR (0): not a hash algorithm
+	Hash bool `tpmdirect:"bit=2"`
+	// SET (1): an algorithm that may be used as an object type
+	// CLEAR (0): an algorithm that is not used as an object type
+	Object    bool  `tpmdirect:"bit=3"`
+	Reserved1 uint8 `tpmdirect:"bit=7:4"`
+	// SET (1): a signing algorithm. The setting of asymmetric,
+	// symmetric, and hash will indicate the type of signing algorithm.
+	// CLEAR (0): not a signing algorithm
+	Signing bool `tpmdirect:"bit=8"`
+	// SET (1): an encryption/decryption algorithm. The setting of
+	// asymmetric, symmetric, and hash will indicate the type of
+	// encryption/decryption algorithm.
+	// CLEAR (0): not an encryption/decryption algorithm
+	Encrypting bool `tpmdirect:"bit=9"`
+	// SET (1): a method such as a key derivative function (KDF)
+	// CLEAR (0): not a method
+	Method    bool   `tpmdirect:"bit=10"`
+	Reserved2 uint32 `tpmdirect:"bit=31:11"`
+}
 
 // 8.3.2
 type TPMAObject struct {
@@ -218,6 +257,44 @@ type TPMALocality struct {
 	Extended uint8 `tpmdirect:"bit=7:5"`
 }
 
+// 8.9
+type TPMACC struct {
+	// indicates the command being selected
+	CommandIndex uint16 `tpmdirect:"bit=15:0"`
+	// shall be zero
+	Reserved1 uint16 `tpmdirect:"bit=21:16"`
+	// SET (1): indicates that the command may write to NV
+	// CLEAR (0): indicates that the command does not write to NV
+	NV bool `tpmdirect:"bit=22"`
+	// SET (1): This command could flush any number of loaded contexts.
+	// CLEAR (0): no additional changes other than indicated by the flushed attribute
+	Extensive bool `tpmdirect:"bit=23"`
+	// SET (1): The context associated with any transient handle in the command will be flushed when this command completes.
+	// CLEAR (0): No context is flushed as a side effect of this command.
+	Flushed bool `tpmdirect="bit=24"`
+	// indicates the number of the handles in the handle area for this command
+	CHandles uint8 `tpmdirect="bit=27:25"`
+	// SET (1): indicates the presence of the handle area in the response
+	RHandle bool `tpmdirect="bit=28"`
+	// SET (1): indicates that the command is vendor-specific
+	// CLEAR (0): indicates that the command is defined in a version of this specification
+	V bool `tpmdirect="bit=29"`
+	// allocated for software; shall be zero
+	Reserved2 uint8 `tpmdirect:"bit=31:30"`
+}
+
+// 8.12
+type TPMAACT struct {
+	// SET (1): The ACT has signaled
+	// CLEAR (0): The ACT has not signaled
+	Signaled bool `tpmdirect:"bit=0"`
+	// SET (1): The ACT signaled bit is preserved over a power cycle
+	// CLEAR (0): The ACT signaled bit is not preserved over a power cycle
+	PreserveSignaled bool `tpmdirect:"bit=1"`
+	// shall be zero
+	Reserved uint32 `tpmdirect:"bit=31:2"`
+}
+
 // 9.2
 // Use native bool for TPMI_YES_NO; encoding/binary already treats this as 8 bits wide.
 type TPMIYesNo = bool
@@ -342,10 +419,72 @@ type TPMTTKAuth struct {
 	Digest TPM2BDigest
 }
 
+// 10.8.1
+type TPMSAlgProperty struct {
+	// an algorithm identifier
+	Alg TPMAlgID
+	// the attributes of the algorithm
+	AlgProperties TPMAAlgorithm
+}
+
+// 10.8.2
+type TPMSTaggedProperty struct {
+	// a property identifier
+	Property TPMPT
+	// the value of the property
+	Value uint32
+}
+
+// 10.8.3
+type TPMSTaggedPCRSelect struct {
+	// the property identifier
+	Tag TPMPTPCR
+	// the bit map of PCR with the identified property
+	PCRSelect []byte `tpmdirect:"sized8"`
+}
+
+// 10.8.4
+type TPMSTaggedPolicy struct {
+	// a permanent handle
+	Handle TPMHandle
+	// the policy algorithm and hash
+	PolicyHash TPMTHA
+}
+
+// 10.8.5
+type TPMSACTData struct {
+	// a permanent handle
+	Handle TPMHandle
+	// the current timeout of the ACT
+	Timeout uint32
+	// the state of the ACT
+	Attributes TPMAACT
+}
+
+// 10.9.1
+type TPMLCC struct {
+	CommandCodes []TPMCC `tpmdirect:"list"`
+}
+
+// 10.9.2
+type TPMLCCA struct {
+	CommandAttributes []TPMACC `tpmdirect:"list"`
+}
+
+// 10.9.3
+type TPMLAlg struct {
+	Algorithms []TPMAlgID `tpmdirect:"list"`
+}
+
+// 10.9.4
+type TPMLHandle struct {
+	Handle []TPMHandle `tpmdirect:"list"`
+}
+
 // 10.9.5
 type TPMLDigest struct {
 	// a list of digests
-	DIgests []TPM2BDigest `tpmdirect:"list"`
+	Digests []TPM2BDigest `tpmdirect:"list"`
 }
 
 // 10.9.6
@@ -357,6 +496,59 @@ type TPMLDigestValues struct {
 // 10.9.7
 type TPMLPCRSelection struct {
 	PCRSelections []TPMSPCRSelection `tpmdirect:"list"`
+}
+
+// 10.9.8
+type TPMLAlgProperty struct {
+	AlgProperties []TPMSAlgProperty `tpmdirect:"list"`
+}
+
+// 10.9.9
+type TPMLTaggedTPMProperty struct {
+	TPMProperty []TPMSTaggedProperty `tpmdirect:"list"`
+}
+
+// 10.9.10
+type TPMLTaggedPCRProperty struct {
+	PCRProperty []TPMSTaggedPCRSelect `tpmdirect:"list"`
+}
+
+// 10.9.11
+type TPMLECCCurve struct {
+	ECCCurves []TPMECCCurve `tpmdirect:"list"`
+}
+
+// 10.9.12
+type TPMLTaggedPolicy struct {
+	Policies []TPMSTaggedPolicy `tpmdirect:"list"`
+}
+
+// 10.9.13
+type TPMLACTData struct {
+	ACTData []TPMSACTData `tpmdirect:"list"`
+}
+
+// 10.10.1
+type TPMUCapabilities struct {
+	Algorithms    *TPMLAlgProperty       `tpmdirect:"selector=0x00000000"` // TPM_CAP_ALGS
+	Handles       *TPMLHandle            `tpmdirect:"selector=0x00000001"` // TPM_CAP_HANDLES
+	Command       *TPMLCCA               `tpmdirect:"selector=0x00000002"` // TPM_CAP_COMMANDS
+	PPCommands    *TPMLCC                `tpmdirect:"selector=0x00000003"` // TPM_CAP_PP_COMMANDS
+	AuditCommands *TPMLCC                `tpmdirect:"selector=0x00000004"` // TPM_CAP_AUDIT_COMMANDS
+	AssignedPCR   *TPMLPCRSelection      `tpmdirect:"selector=0x00000005"` // TPM_CAP_PCRS
+	TPMProperties *TPMLTaggedTPMProperty `tpmdirect:"selector=0x00000006"` // TPM_CAP_TPM_PROPERTIES
+	PCRProperties *TPMLTaggedPCRProperty `tpmdirect:"selector=0x00000007"` // TPM_CAP_PCR_PROPERTIES
+	ECCCurves     *TPMLECCCurve          `tpmdirect:"selector=0x00000008"` // TPM_CAP_ECC_CURVES
+	AuthPolicies  *TPMLTaggedPolicy      `tpmdirect:"selector=0x00000009"` // TPM_CAP_AUTH_POLICIES
+	ACTData       *TPMLACTData           `tpmdirect:"selector=0x0000000A"` // TPM_CAP_ACT
+}
+
+// 10.10.2
+type TPMSCapabilityData struct {
+	// the capability
+	Capability TPMCap
+	// the capability data
+	Data TPMUCapabilities `tpmdirect:"tag=Capability"`
 }
 
 // 10.11.1
@@ -748,7 +940,7 @@ type TPMTSignature struct {
 	// selector of the algorithm used to construct the signature
 	SigAlg TPMIAlgSigScheme `tpmdirect:"nullable"`
 	// This shall be the actual signature information.
-	Signature TPMUSignature
+	Signature TPMUSignature `tpmdirect:"tag=SigAlg"`
 }
 
 // 11.4.33

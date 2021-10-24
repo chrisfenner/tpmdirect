@@ -50,16 +50,11 @@ func (t *TPM) Execute(cmd Command, rsp Response, extraSess ...Session) error {
 	if err != nil {
 		return err
 	}
-	hasSessions := len(sess) > 0
-	wantSessions := numAuthHandles(cmd)
-	if len(sess) != wantSessions {
-		return fmt.Errorf("command '%v' needs %d authorization sessions, got %d",
-			reflect.TypeOf(cmd), wantSessions, len(sess))
-	}
 	sess = append(sess, extraSess...)
 	if len(sess) > 3 {
 		return fmt.Errorf("too many sessions: %v", len(sess))
 	}
+	hasSessions := len(sess) > 0
 	// Initialize the sessions, if needed
 	for i, s := range sess {
 		if err := s.Init(t); err != nil {
@@ -180,7 +175,7 @@ func marshalStruct(buf *bytes.Buffer, v reflect.Value) error {
 		for i := 0; i < v.NumField(); i++ {
 			thisBitwise := hasTag(v.Type().Field(i), "bit")
 			if thisBitwise {
-				if hasTag(v.Type().Field(i), "sized") {
+				if hasTag(v.Type().Field(i), "sized") || hasTag(v.Type().Field(i), "sized8") {
 					return fmt.Errorf("struct '%v' field '%v' is both bitwise and sized",
 						v.Type().Name(), v.Type().Field(i).Name)
 				}
@@ -223,6 +218,7 @@ func marshalStruct(buf *bytes.Buffer, v reflect.Value) error {
 		}
 		list := hasTag(v.Type().Field(i), "list")
 		sized := hasTag(v.Type().Field(i), "sized")
+		sized8 := hasTag(v.Type().Field(i), "sized8")
 		tag := tags(v.Type().Field(i))["tag"]
 		// Serialize to a temporary buffer, in case we need to size it
 		// (Better to simplify this complex reflection-based marshalling code than to save
@@ -261,6 +257,11 @@ func marshalStruct(buf *bytes.Buffer, v reflect.Value) error {
 		}
 		if sized {
 			if err := binary.Write(buf, binary.BigEndian, uint16(res.Len())); err != nil {
+				return err
+			}
+		}
+		if sized8 {
+			if err := binary.Write(buf, binary.BigEndian, uint8(res.Len())); err != nil {
 				return err
 			}
 		}
@@ -335,7 +336,10 @@ func unmarshal(buf *bytes.Buffer, vs ...reflect.Value) error {
 	for _, v := range vs {
 		switch v.Kind() {
 		case reflect.Bool, reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64, reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-			return unmarshalNumeric(buf, v)
+			if err := unmarshalNumeric(buf, v); err != nil {
+				return err
+			}
+			continue
 		case reflect.Slice:
 			var length uint32
 			// special case for byte slices: just read the entire rest of the buffer
@@ -429,10 +433,26 @@ func unmarshalStruct(buf *bytes.Buffer, v reflect.Value) error {
 				v.Type().Field(i).Name, v.Type().Name())
 		}
 		sized := hasTag(v.Type().Field(i), "sized")
-		var expectedSize uint16
+		sized8 := hasTag(v.Type().Field(i), "sized8")
 		// If sized, unmarshal a size field first, then restrict unmarshalling to the given size
 		bufToReadFrom := buf
 		if sized {
+			var expectedSize uint16
+			binary.Read(buf, binary.BigEndian, &expectedSize)
+			sizedBufArray := make([]byte, int(expectedSize))
+			n, err := buf.Read(sizedBufArray)
+			if n != int(expectedSize) {
+				return fmt.Errorf("ran out of data reading sized parameter '%v' inside struct of type '%v'",
+					v.Type().Field(i).Name, v.Type().Name())
+			}
+			if err != nil {
+				return fmt.Errorf("error reading data for parameter '%v' inside struct of type '%v'",
+					v.Type().Field(i).Name, v.Type().Name())
+			}
+			bufToReadFrom = bytes.NewBuffer(sizedBufArray)
+		}
+		if sized8 {
+			var expectedSize uint8
 			binary.Read(buf, binary.BigEndian, &expectedSize)
 			sizedBufArray := make([]byte, int(expectedSize))
 			n, err := buf.Read(sizedBufArray)
@@ -477,7 +497,7 @@ func unmarshalStruct(buf *bytes.Buffer, v reflect.Value) error {
 				return fmt.Errorf("unmarshalling field %v of struct of type '%v', %w", i, v.Type(), err)
 			}
 		}
-		if sized {
+		if sized || sized8 {
 			if bufToReadFrom.Len() != 0 {
 				return fmt.Errorf("extra data at the end of sized parameter '%v' inside struct of type '%v'",
 					v.Type().Field(i).Name, v.Type().Name())
@@ -845,7 +865,7 @@ func rspHandles(rsp *bytes.Buffer, rspStruct Response) error {
 }
 
 // rspParametersArea fetches, but does not manipulate, the parameters area
-// from the command. If there is a mismatch between the response's
+// from the response. If there is a mismatch between the response's
 // indicated parameters area size and the actual size, returns an error here.
 // rsp is updated to point to the rest of the response after the handles.
 func rspParametersArea(hasSessions bool, rsp *bytes.Buffer) ([]byte, error) {
@@ -909,16 +929,14 @@ func rspParameters(parms []byte, sess []Session, rspStruct Response) error {
 	}
 	length := binary.BigEndian.Uint16(parms[0:])
 	// TODO: Make this nice using structure tagging.
-	if int(length)+2 > len(parms) {
-		// Assume this means the command does not support parameter encryption.
-		return nil
-	}
-	for i, s := range sess {
-		if !s.IsEncryption() {
-			continue
-		}
-		if err := s.Decrypt(parms[2 : 2+length]); err != nil {
-			return fmt.Errorf("decrypting first parameter with session %d: %w", i, err)
+	if int(length)+2 <= len(parms) {
+		for i, s := range sess {
+			if !s.IsEncryption() {
+				continue
+			}
+			if err := s.Decrypt(parms[2 : 2+length]); err != nil {
+				return fmt.Errorf("decrypting first parameter with session %d: %w", i, err)
+			}
 		}
 	}
 	return unmarshal(bytes.NewBuffer(parms), parmsFields...)

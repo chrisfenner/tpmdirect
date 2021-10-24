@@ -361,6 +361,197 @@ const (
 	TPMXETrial  TPMSE = 0x03
 )
 
+// 6.12
+const (
+	TPMCapAlgs          TPMCap = 0x00000000
+	TPMCapHandles       TPMCap = 0x00000001
+	TPMCapCommands      TPMCap = 0x00000002
+	TPMCapPPCommands    TPMCap = 0x00000003
+	TPMCapAuditCommands TPMCap = 0x00000004
+	TPMCapPCRs          TPMCap = 0x00000005
+	TPMCapTPMProperties TPMCap = 0x00000006
+	TPMCapPCRProperties TPMCap = 0x00000007
+	TPMCapECCCurves     TPMCap = 0x00000008
+	TPMCapAuthPolicies  TPMCap = 0x00000009
+	TPMCapACT           TPMCap = 0x0000000A
+)
+
+// 6.13
+const (
+	// a 4-octet character string containing the TPM Family value (TPM_SPEC_FAMILY)
+	TPMPTFamilyIndicator TPMPT = 0x00000100
+	// the level of the specification
+	TPMPTLevel TPMPT = 0x00000101
+	// the specification Revision times 100
+	TPMPTRevision TPMPT = 0x00000102
+	// the specification day of year using TCG calendar
+	TPMPTDayofYear TPMPT = 0x00000103
+	// the specification year using the CE
+	TPMPTYear TPMPT = 0x00000104
+	// the vendor ID unique to each TPM manufacturer
+	TPMPTManufacturer TPMPT = 0x00000105
+	// the first four characters of the vendor ID string
+	TPMPTVendorString1 TPMPT = 0x00000106
+	// the second four characters of the vendor ID string
+	TPMPTVendorString2 TPMPT = 0x00000107
+	// the third four characters of the vendor ID string
+	TPMPTVendorString3 TPMPT = 0x00000108
+	// the fourth four characters of the vendor ID sting
+	TPMPTVendorString4 TPMPT = 0x00000109
+	// vendor-defined value indicating the TPM model
+	TPMPTVendorTPMType TPMPT = 0x0000010A
+	// the most-significant 32 bits of a TPM vendor-specific value
+	// indicating the version number of the firmware.
+	TPMPTFirmwareVersion1 TPMPT = 0x0000010B
+	// the least-significant 32 bits of a TPM vendor-specific value
+	// indicating the version number of the firmware.
+	TPMPTFirmwareVersion2 TPMPT = 0x0000010C
+	// the maximum size of a parameter TPM2B_MAX_BUFFER)
+	TPMPTInputBuffer TPMPT = 0x0000010D
+	// the minimum number of transient objects that can be held in TPM RAM
+	TPMPTHRTransientMin TPMPT = 0x0000010E
+	// the minimum number of persistent objects that can be held in TPM NV memory
+	TPMPTHRPersistentMin TPMPT = 0x0000010F
+	// the minimum number of authorization sessions that can be held in TPM RAM
+	TPMPTHRLoadedMin TPMPT = 0x00000110
+	// the number of authorization sessions that may be active at a time
+	TPMPTActiveSessionsMax TPMPT = 0x00000111
+	// the number of PCR implemented
+	TPMPTPCRCount TPMPT = 0x00000112
+	// the minimum number of octets in a TPMS_PCR_SELECT.sizeOfSelect
+	TPMPTPCRSelectMin TPMPT = 0x00000113
+	// the maximum allowed difference (unsigned) between the contextID values of two saved session contexts
+	TPMPTContextGapMax TPMPT = 0x00000114
+	// skipped
+	skippedTPMPT115 TPMPT = 0x00000115
+	// the maximum number of NV Indexes that are allowed to have the TPM_NT_COUNTER attribute
+	TPMPTNVCountersMax TPMPT = 0x00000116
+	// the maximum size of an NV Index data area
+	TPMPTNVIndexMax TPMPT = 0x00000117
+	// a TPMA_MEMORY indicating the memory management method for the TPM
+	TPMPTMemory TPMPT = 0x00000118
+	// interval, in milliseconds, between updates to the copy of TPMS_CLOCK_INFO.clock in NV
+	TPMPTClockUpdate TPMPT = 0x00000119
+	// the algorithm used for the integrity HMAC on saved contexts and for hashing the fuData of TPM2_FirmwareRead()
+	TPMPTContextHash TPMPT = 0x0000011A
+	// TPM_ALG_ID, the algorithm used for encryption of saved contexts
+	TPMPTContextSym TPMPT = 0x0000011B
+	// TPM_KEY_BITS, the size of the key used for encryption of saved contexts
+	TPMPTContextSymSize TPMPT = 0x0000011C
+	// the modulus - 1 of the count for NV update of an orderly counter
+	TPMPTOrderlyCount TPMPT = 0x0000011D
+	// the maximum value for commandSize in a command
+	TPMPTMaxCommandSize TPMPT = 0x0000011E
+	// the maximum value for responseSize in a response
+	TPMPTMaxResponseSize TPMPT = 0x0000011F
+	// the maximum size of a digest that can be produced by the TPM
+	TPMPTMaxDigest TPMPT = 0x00000120
+	// the maximum size of an object context that will be returned by TPM2_ContextSave
+	TPMPTMaxObjectContext TPMPT = 0x00000121
+	// the maximum size of a session context that will be returned by TPM2_ContextSave
+	TPMPTMaxSessionContext TPMPT = 0x00000122
+	// platform-specific family (a TPM_PS value)(see Table 25)
+	TPMPTPSFamilyIndicator TPMPT = 0x00000123
+	// the level of the platform-specific specification
+	TPMPTPSLevel TPMPT = 0x00000124
+	// a platform specific value
+	TPMPTPSRevision TPMPT = 0x00000125
+	// the platform-specific TPM specification day of year using TCG calendar
+	TPMPTPSDayOfYear TPMPT = 0x00000126
+	// the platform-specific TPM specification year using the CE
+	TPMPTPSYear TPMPT = 0x00000127
+	// the number of split signing operations supported by the TPM
+	TPMPTSplitMax TPMPT = 0x00000128
+	// total number of commands implemented in the TPM
+	TPMPTTotalCommands TPMPT = 0x00000129
+	// number of commands from the TPM library that are implemented
+	TPMPTLibraryCommands TPMPT = 0x0000012A
+	// number of vendor commands that are implemented
+	TPMPTVendorCommands TPMPT = 0x0000012B
+	// the maximum data size in one NV write, NV read, NV extend, or NV certify command
+	TPMPTNVBufferMax TPMPT = 0x0000012C
+	// a TPMA_MODES value, indicating that the TPM is designed for these modes.
+	TPMPTModes TPMPT = 0x0000012D
+	// the maximum size of a TPMS_CAPABILITY_DATA structure returned in TPM2_GetCapability().
+	TPMPTMaxCapBuffer TPMPT = 0x0000012E
+	// TPMA_PERMANENT
+	TPMPTPermanent TPMPT = 0x00000200
+	// TPMA_STARTUP_CLEAR
+	TPMPTStartupClear TPMPT = 0x00000201
+	// the number of NV Indexes currently defined
+	TPMPTHRNVIndex TPMPT = 0x00000202
+	// the number of authorization sessions currently loaded into TPM RAM
+	TPMPTHRLoaded TPMPT = 0x00000203
+	// the number of additional authorization sessions, of any type, that could be loaded into TPM RAM
+	TPMPTHRLoadedAvail TPMPT = 0x00000204
+	// the number of active authorization sessions currently being tracked by the TPM
+	TPMPTHRActive TPMPT = 0x00000205
+	// the number of additional authorization sessions, of any type, that could be created
+	TPMPTHRActiveAvail TPMPT = 0x00000206
+	// estimate of the number of additional transient objects that could be loaded into TPM RAM
+	TPMPTHRTransientAvail TPMPT = 0x00000207
+	// the number of persistent objects currently loaded into TPM NV memory
+	TPMPTHRPersistent TPMPT = 0x00000208
+	// the number of additional persistent objects that could be loaded into NV memory
+	TPMPTHRPersistentAvail TPMPT = 0x00000209
+	// the number of defined NV Indexes that have NV the TPM_NT_COUNTER attribute
+	TPMPTNVCounters TPMPT = 0x0000020A
+	// the number of additional NV Indexes that can be defined with their TPM_NT of TPM_NV_COUNTER and the TPMA_NV_ORDERLY attribute SET
+	TPMPTNVCountersAvail TPMPT = 0x0000020B
+	// code that limits the algorithms that may be used with the TPM
+	TPMPTAlgorithmSet TPMPT = 0x0000020C
+	// the number of loaded ECC curves
+	TPMPTLoadedCurves TPMPT = 0x0000020D
+	// the current value of the lockout counter (failedTries)
+	TPMPTLockoutCounter TPMPT = 0x0000020E
+	// the number of authorization failures before DA lockout is invoked
+	TPMPTMaxAuthFail TPMPT = 0x0000020F
+	// the number of seconds before the value reported by TPM_PT_LOCKOUT_COUNTER is decremented
+	TPMPTLockoutInterval TPMPT = 0x00000210
+	// the number of seconds after a lockoutAuth failure before use of lockoutAuth may be attempted again
+	TPMPTLockoutRecovery TPMPT = 0x00000211
+	// number of milliseconds before the TPM will accept another command that will modify NV
+	TPMPTNVWriteRecovery TPMPT = 0x00000212
+	// the high-order 32 bits of the command audit counter
+	TPMPTAuditCounter0 TPMPT = 0x00000213
+	// the low-order 32 bits of the command audit counter
+	TPMPTAuditCounter1 TPMPT = 0x00000214
+)
+
+// 6.14
+const (
+	// a SET bit in the TPMS_PCR_SELECT indicates that the PCR is saved and restored by TPM_SU_STATE
+	TPMPTPCRSave TPMPTPCR = 0x00000000
+	// a SET bit in the TPMS_PCR_SELECT indicates that the PCR may be extended from locality 0
+	TPMPTPCRExtendL0 TPMPTPCR = 0x00000001
+	// a SET bit in the TPMS_PCR_SELECT indicates that the PCR may be reset by TPM2_PCR_Reset() from locality 0
+	TPMPTPCRResetL0 TPMPTPCR = 0x00000002
+	// a SET bit in the TPMS_PCR_SELECT indicates that the PCR may be extended from locality 1
+	TPMPTPCRExtendL1 TPMPTPCR = 0x00000003
+	// a SET bit in the TPMS_PCR_SELECT indicates that the PCR may be reset by TPM2_PCR_Reset() from locality 1
+	TPMPTPCRResetL1 TPMPTPCR = 0x00000004
+	// a SET bit in the TPMS_PCR_SELECT indicates that the PCR may be extended from locality 2
+	TPMPTPCRExtendL2 TPMPTPCR = 0x00000005
+	// a SET bit in the TPMS_PCR_SELECT indicates that the PCR may be reset by TPM2_PCR_Reset() from locality 2
+	TPMPTPCRResetL2 TPMPTPCR = 0x00000006
+	// a SET bit in the TPMS_PCR_SELECT indicates that the PCR may be extended from locality 3
+	TPMPTPCRExtendL3 TPMPTPCR = 0x00000007
+	// a SET bit in the TPMS_PCR_SELECT indicates that the PCR may be reset by TPM2_PCR_Reset() from locality 3
+	TPMPTPCRResetL3 TPMPTPCR = 0x00000008
+	// a SET bit in the TPMS_PCR_SELECT indicates that the PCR may be extended from locality 4
+	TPMPTPCRExtendL4 TPMPTPCR = 0x00000009
+	// a SET bit in the TPMS_PCR_SELECT indicates that the PCR may be reset by TPM2_PCR_Reset() from locality 4
+	TPMPTPCRResetL4 TPMPTPCR = 0x0000000A
+	// a SET bit in the TPMS_PCR_SELECT indicates that modifications to this PCR (reset or Extend) will not increment the pcrUpdateCounter
+	TPMPTPCRNoIncrement TPMPTPCR = 0x00000011
+	// a SET bit in the TPMS_PCR_SELECT indicates that the PCR is reset by a D-RTM event
+	TPMPTPCRDRTMRest TPMPTPCR = 0x00000012
+	// a SET bit in the TPMS_PCR_SELECT indicates that the PCR is controlled by policy
+	TPMPTPCRPolicy TPMPTPCR = 0x00000013
+	// a SET bit in the TPMS_PCR_SELECT indicates that the PCR is controlled by an authorization value
+	TPMPTPCRAuth TPMPTPCR = 0x00000014
+)
+
 // 7.4
 const (
 	TPMRHOwner       TPMHandle = 0x40000001
