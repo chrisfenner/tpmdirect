@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
+	"io"
 	"math"
 	"reflect"
 	"strconv"
@@ -128,8 +129,23 @@ func (t *TPM) Execute(cmd Command, rsp Response, extraSess ...Session) error {
 	return nil
 }
 
+// Marshal will serialize the given values, appending them onto the given writer.
+// Returns an error if any of the values are not marshallable.
+func Marshal(w io.Writer, vs ...interface{}) error {
+	var reflects []reflect.Value
+	for _, v := range vs {
+		reflects = append(reflects, reflect.ValueOf(v))
+	}
+	var buf bytes.Buffer
+	if err := marshal(&buf, reflects...); err != nil {
+		return err
+	}
+	_, err := io.Copy(w, &buf)
+	return err
+}
+
 // marshal will serialize the given values, appending them onto the given buffer.
-// Panics if any of the values are not marshallable.
+// Returns an error if any of the values are not marshallable.
 func marshal(buf *bytes.Buffer, vs ...reflect.Value) error {
 	for _, v := range vs {
 		switch v.Kind() {
@@ -145,8 +161,12 @@ func marshal(buf *bytes.Buffer, vs ...reflect.Value) error {
 			if err := marshalStruct(buf, v); err != nil {
 				return err
 			}
+		case reflect.Ptr:
+			if err := marshalStruct(buf, v.Elem()); err != nil {
+				return err
+			}
 		default:
-			return fmt.Errorf("nor marshallable: %#v", v)
+			return fmt.Errorf("not marshallable: %#v", v)
 		}
 	}
 	return nil
@@ -326,6 +346,21 @@ func marshalUnion(buf *bytes.Buffer, v reflect.Value, selector int64) error {
 		}
 	}
 	return fmt.Errorf("selector value '%v' not handled for type '%v'", selector, v.Type().Name())
+}
+
+// Unmarshal deserializes the given values from the reader.
+// Returns an error if the buffer does not contain enough data to satisfy the types,
+// or if the types are not unmarshallable.
+func Unmarshal(r io.Reader, vs ...*interface{}) error {
+	var reflects []reflect.Value
+	for _, v := range vs {
+		reflects = append(reflects, reflect.ValueOf(v).Elem())
+	}
+	var buf bytes.Buffer
+	if _, err := io.Copy(&buf, r); err != nil {
+		return err
+	}
+	return unmarshal(&buf, reflects...)
 }
 
 // unmarshal will deserialize the given values from the given buffer.
