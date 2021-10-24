@@ -83,6 +83,7 @@ func (t *TPM) Execute(cmd Command, rsp Response, extraSess ...Session) error {
 	command = append(command, parms...)
 
 	// Send the command via the transport.
+	fmt.Printf("cmd: %x\n", command)
 	response, err := t.transport.Send(command)
 	if err != nil {
 		return err
