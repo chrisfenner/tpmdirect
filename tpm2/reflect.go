@@ -351,9 +351,12 @@ func marshalUnion(buf *bytes.Buffer, v reflect.Value, selector int64) error {
 // Unmarshal deserializes the given values from the reader.
 // Returns an error if the buffer does not contain enough data to satisfy the types,
 // or if the types are not unmarshallable.
-func Unmarshal(r io.Reader, vs ...*interface{}) error {
+func Unmarshal(r io.Reader, vs ...interface{}) error {
 	var reflects []reflect.Value
 	for _, v := range vs {
+		if reflect.ValueOf(v).Kind() != reflect.Ptr {
+			return fmt.Errorf("all parameters to Unmarshal must be pointers")
+		}
 		reflects = append(reflects, reflect.ValueOf(v).Elem())
 	}
 	var buf bytes.Buffer
