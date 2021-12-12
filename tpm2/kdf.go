@@ -1,11 +1,9 @@
 package tpm2
 
 import (
-	"crypto/hmac"
 	"encoding/binary"
-	"hash"
 
-	"github.com/chrisfenner/crypto/kbkdf"
+	"golang.org/x/crypto/kbkdf"
 )
 
 // KDFA implements the SP800-108A-CTR KDF as decribed in Part 1, 11.4.10
@@ -13,8 +11,7 @@ func KDFA(alg TPMIAlgHash, key, label, contextU, contextV []byte, lenBytes int) 
 	context := make([]byte, 0, len(contextU)+len(contextV))
 	context = append(context, contextU...)
 	context = append(context, contextV...)
-	hmac := func() hash.Hash { return hmac.New(alg.Hash, key) }
-	return kbkdf.Counter(hmac, lenBytes, label, context)
+	return kbkdf.HMACCounter(alg.Hash, lenBytes, key, label, context)
 }
 
 // KDFe implements the SP800-56A KDF as decribed in Part 1, 11.4.10.3

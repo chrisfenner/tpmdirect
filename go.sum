@@ -1,5 +1,3 @@
-github.com/chrisfenner/crypto v0.0.0-20211212022239-a128b7749a60 h1:vU8CW5T4ex0HYJogqS0b6eo28A+CL/yNdggboOCD3PI=
-github.com/chrisfenner/crypto v0.0.0-20211212022239-a128b7749a60/go.mod h1:y/BtW24o7dgpjhidJ6f7iuEF64pQ1fRFzPCed2/S/P4=
 github.com/chrisfenner/crypto v0.0.0-20211212191354-612393ddde2b h1:b82Kk5jhFsLhqWod98RYLex45b+FL0NT0lGpNjQdFv4=
 github.com/chrisfenner/crypto v0.0.0-20211212191354-612393ddde2b/go.mod h1:IxCIyHEi3zRg3s0A5j5BB6A9Jmi73HwBIUl50j+osU4=
 github.com/chrisfenner/go-tpm-sim v0.0.0-20211022232009-8a050aba42b1 h1:ItDyH/dhCr8ACjJtecogJYeKffL5h3EJxMPKrwi1Wiw=
