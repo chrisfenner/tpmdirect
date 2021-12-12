@@ -8,4 +8,4 @@ require (
 	github.com/google/go-cmp v0.5.6
 )
 
-replace golang.org/x/crypto => github.com/chrisfenner/crypto v0.0.0-20211212021344-34055e1e84a5
+replace golang.org/x/crypto => github.com/chrisfenner/crypto v0.0.0-20211212023216-a475de873b7a
