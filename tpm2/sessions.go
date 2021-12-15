@@ -336,7 +336,10 @@ func getEncryptedSaltECC(nameAlg TPMIAlgHash, parms *TPMSECCParms, pub *TPMSECCP
 		return nil, nil, fmt.Errorf("could not encrypt salt to ECC key: %w", err)
 	}
 	zx, _ := curve.Params().ScalarMult(eccPub.x, eccPub.y, ephPriv)
-	z := make([]byte, curve.Params().BitSize / 8)
+	// ScalarMult returns a big.Int, whose Bytes() function may return the
+	// compacted form. In our case, we want to left-pad zx to the size of
+	// the curve.
+	z := make([]byte, (curve.Params().BitSize+7)/8)
 	zx.FillBytes(z)
 	salt := KDFe(nameAlg, z, []byte("SECRET\x00"), ephPubX.Bytes(), pub.X.Buffer, nameAlg.Hash().Size())
 
